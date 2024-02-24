@@ -35,3 +35,17 @@ https://github.com/divyakraman/Single-Image-Unsupervised-Hyperspectral-Reconstru
 
 https://github.com/AmusementClub/vs-fgrain-cuda
 https://github.com/alasdairnewson/film_grain_rendering_gpu
+
+```python
+import numpy as np
+mu = 0.1
+sigma = 0.0
+u = 0.5
+
+cell_size = 1 / np.ceil(1 / mu)
+area = np.pi * ((mu * mu) + (sigma * sigma))
+lambda_u = -((cell_size * cell_size) / area) * np.log(1 - u)
+
+print(lambda_u)
+print(np.exp(-lambda_u))
+```

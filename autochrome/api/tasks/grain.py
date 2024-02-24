@@ -13,6 +13,34 @@ from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(1)
+def lambda_lut(mu: float, sigma: float, count: int = 256) -> np.ndarray:
+    # Generates a LUT for lambda values used by the Poisson distribution.
+    # The lut stores the lambda value and the e^-lambda value.
+    # Equation (2) in Realistic Film Grain Rendering by Alasdair et al.
+    # https://www.ipol.im/pub/art/2017/192/article_lr.pdf
+
+    use_source_code = True
+    lut = np.zeros((count), cl.cltypes.float2)
+
+    for i in range(count):
+        u = i / count
+
+        if use_source_code:
+            cell_size = 1 / np.ceil(1 / mu)
+            area = np.pi * ((mu * mu) + (sigma * sigma))
+            lambda_u = -((cell_size * cell_size) / area) * np.log(1 - u)
+        else:
+            mean_radius = np.exp(mu + (sigma**2 / 2))
+            mean_area = np.pi * (mean_radius**2)
+            lambda_u = (1 / mean_area) * np.log(1 - u)
+
+        lut[i]['x'] = lambda_u
+        lut[i]['y'] = np.exp(-lambda_u)
+
+    return lut
+
+
 class GrainTask(OpenCL):
     def __init__(self, queue) -> None:
         super().__init__(queue)
@@ -58,30 +86,10 @@ class GrainTask(OpenCL):
         return array
 
     @lru_cache(1)
-    def lambda_lut(self, mu: float, sigma: float, count: int = 256) -> Buffer:
-        # Generates a LUT for lambda values used by the Poisson distribution.
-        # The lut stores the lambda value and the e^-lambda value.
-        # Equation (2) in Realistic Film Grain Rendering by Alasdair et al.
-        # https://www.ipol.im/pub/art/2017/192/article_lr.pdf
-
-        use_source_code = True
-        lut = np.float32((2, count))
-        for i in range(count):
-            u = i / count
-
-            if use_source_code:
-                ag = 1 / np.ceil(1 / mu)
-                area = np.pi * ((mu * mu) + (sigma * sigma))
-                lambda_u = -((ag * ag) / area) * np.log(1 - u)
-            else:
-                mean_radius = np.exp(mu + (sigma**2 / 2))
-                mean_area = np.pi * (mean_radius**2)
-                lambda_u = (1 / mean_area) * np.log(1 - u)
-
-            lut[0] = lambda_u
-            lut[1] = np.exp(-lambda_u)
-
-        return lut
+    def update_lambda_lut(self, mu: float, sigma: float, count: int = 256) -> Buffer:
+        lut = lambda_lut(mu, sigma, count)
+        buffer = Buffer(self.context, array=lut, args=(mu, sigma, count))
+        return buffer
 
     def render_grain(
         self,
@@ -91,6 +99,8 @@ class GrainTask(OpenCL):
         grain_sigma: float,
         blur_sigma: float,
         samples: int,
+        seed_offset: int,
+        bounds: tuple[float, float, float, float],
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -105,7 +115,7 @@ class GrainTask(OpenCL):
         image = Image(self.context, image_array, args=str(image_file))
         logger.debug(image.shape)
 
-        # lambda_lut = self.lambda_lut(grain_mu, grain_sigma)
+        lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
 
         # create output buffer
         grain = self.update_image(resolution, flags=cl.mem_flags.WRITE_ONLY)
@@ -115,19 +125,24 @@ class GrainTask(OpenCL):
             grain_sigma,
             blur_sigma,
             samples,
+            seed_offset,
+            bounds,
         )
 
+        render_bounds = np.array(bounds, dtype=cl.cltypes.float4)
         # image.clear_image()
 
         # run program
         self.kernel.set_arg(0, image.image)
         self.kernel.set_arg(1, grain.image)
-        # self.kernel.set_arg(2, lambda_lut.buffer)
-        self.kernel.set_arg(2, np.int32(samples))
-        self.kernel.set_arg(3, np.float32(grain_sigma))
-        self.kernel.set_arg(4, np.float32(grain_mu))
-        self.kernel.set_arg(5, np.float32(blur_sigma))
-        # self.kernel.set_arg(6, np.int32(0))
+        self.kernel.set_arg(2, lut.buffer)
+        self.kernel.set_arg(3, np.int32(samples))
+        self.kernel.set_arg(4, np.float32(grain_sigma))
+        self.kernel.set_arg(5, np.float32(grain_mu))
+        self.kernel.set_arg(6, np.float32(blur_sigma))
+        self.kernel.set_arg(7, np.int32(seed_offset))
+        self.kernel.set_arg(8, render_bounds)
+
         w, h = resolution.width(), resolution.height()
         global_work_size = (w, h)
         local_work_size = None
@@ -142,12 +157,20 @@ class GrainTask(OpenCL):
 
     def run(self, project: Project) -> Image:
         image_file = File(project.input.image_path)
-        resolution = project.render.resolution
-        grain_mu = 0.01
-        grain_sigma = 0.1
-        blur_sigma = 0.4
-        samples = 50
+        bounds = (
+            project.grain.bounds_min.x(),
+            project.grain.bounds_min.y(),
+            project.grain.bounds_max.x(),
+            project.grain.bounds_max.y(),
+        )
         image = self.render_grain(
-            image_file, resolution, grain_mu, grain_sigma, blur_sigma, samples
+            image_file,
+            resolution=project.render.resolution,
+            grain_mu=project.grain.grain_mu,
+            grain_sigma=project.grain.grain_sigma,
+            blur_sigma=project.grain.blur_sigma,
+            samples=project.grain.samples,
+            seed_offset=project.grain.seed_offset,
+            bounds=bounds,
         )
         return image

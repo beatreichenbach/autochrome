@@ -26,6 +26,14 @@ uint wang_hash(
     return seed;
 }
 
+
+uint pcg_hash(uint input)
+{
+    uint state = input * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
 /*
 * @brief Generate unique seed for a a cell, given the coordinates of the cell
 *
@@ -55,7 +63,7 @@ uint cell_seed(
 void init_rand(uint  *state, const uint seed)
 {
     uint local_seed = seed;
-    *state = wang_hash(local_seed);
+    *state = pcg_hash(local_seed);
 }
 
 /*

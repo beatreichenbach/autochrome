@@ -65,7 +65,46 @@ class ProjectEditor(ParameterEditor):
         parm.set_slider_max(780)
         input_group.add_parameter(parm)
 
-        # flare
+        # grain
+        box = self.add_group('grain')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        input_group = box.form
+
+        parm = IntParameter(name='samples')
+        parm.set_line_min(0)
+        parm.set_slider_visible(False)
+        input_group.add_parameter(parm)
+
+        parm = IntParameter(name='seed_offset')
+        parm.set_slider_visible(False)
+        input_group.add_parameter(parm)
+
+        parm = FloatParameter(name='grain_mu')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        input_group.add_parameter(parm)
+
+        parm = FloatParameter(name='grain_sigma')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        input_group.add_parameter(parm)
+
+        parm = FloatParameter(name='blur_sigma')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        input_group.add_parameter(parm)
+
+        parm = PointFParameter(name='bounds_min')
+        input_group.add_parameter(parm)
+
+        parm = PointFParameter(name='bounds_max')
+        input_group.add_parameter(parm)
+
+        # render
         box = self.add_group('render')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)

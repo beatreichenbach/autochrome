@@ -26,7 +26,18 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/test.jpg'
+    image_path: str = '/home/beat/dev/autochrome/bike.jpg'
+
+
+@hashable_dataclass
+class Grain:
+    samples: int = 64
+    grain_mu: float = 0.05
+    grain_sigma: float = 0.0
+    blur_sigma: float = 0.4
+    seed_offset: int = 0
+    bounds_min: QtCore.QPointF = deep_field(QtCore.QPointF(0, 0))
+    bounds_max: QtCore.QPointF = deep_field(QtCore.QPointF(1280, 720))
 
 
 @hashable_dataclass
@@ -42,7 +53,7 @@ class Output:
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(16, 16))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(1280, 720))
 
     # system
     device: str = ''
@@ -52,5 +63,6 @@ class Render:
 class Project:
     input: Input = field(default_factory=Input)
     spectral: Spectral = field(default_factory=Spectral)
+    grain: Grain = field(default_factory=Grain)
     output: Output = field(default_factory=Output)
     render: Render = field(default_factory=Render)

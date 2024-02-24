@@ -492,4 +492,5 @@ def exec_():
 
 if __name__ == '__main__':
     logging.basicConfig()
+    os.environ['OPENCL_REBUILD'] = '1'
     exec_()
