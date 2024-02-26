@@ -4,7 +4,8 @@ import random
 
 from PySide2 import QtWidgets, QtCore
 
-from autochrome.api.data import Project
+from autochrome.api.data import Project, RenderElement
+from autochrome.utils import ocio
 from qt_extensions import helper
 from qt_extensions.parameters import (
     BoolParameter,
@@ -108,11 +109,42 @@ class ProjectEditor(ParameterEditor):
         box = self.add_group('render')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
-        output_group = box.form
+        render_group = box.form
 
         parm = SizeParameter(name='resolution')
         parm.set_slider_visible(False)
         parm.set_keep_ratio(False)
+        render_group.add_parameter(parm)
+
+        # output
+        box = self.add_group('output')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        output_group = box.form
+
+        # actions
+        self.render_to_disk = QtWidgets.QAction('Render to Disk', self)
+        button = QtWidgets.QToolButton()
+        button.setDefaultAction(self.render_to_disk)
+        output_group.add_widget(button, column=2)
+
+        # parameters
+        parm = EnumParameter('element')
+        parm.set_enum(RenderElement)
+        parm.set_tooltip('Output element')
+        output_group.add_parameter(parm)
+
+        parm = PathParameter('path')
+        parm.set_method(PathParameter.SAVE_FILE)
+        parm.set_tooltip(
+            'Output image path. Use $F4 to replace frame numbers.\n'
+            'For example: render.$F4.exr'
+        )
+        output_group.add_parameter(parm)
+
+        parm = StringParameter('colorspace')
+        parm.set_menu(ocio.colorspace_names())
+        parm.set_tooltip('Colorspace from the OCIO config.\nFor example: ACES - ACEScg')
         output_group.add_parameter(parm)
 
     def project(self) -> Project:

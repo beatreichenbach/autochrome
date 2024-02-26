@@ -153,7 +153,8 @@ class Storage(JSONStorage, metaclass=Singleton):
         data = basic(self.settings)
         try:
             self.write_data(data, self._settings_path)
-        except ValueError:
+        except ValueError as e:
+            logger.exception(e)
             return False
         return True
 
@@ -161,7 +162,8 @@ class Storage(JSONStorage, metaclass=Singleton):
         data = basic(self.state)
         try:
             self.write_data(data, self._state_path)
-        except ValueError:
+        except ValueError as e:
+            logger.exception(e)
             return False
         return True
 

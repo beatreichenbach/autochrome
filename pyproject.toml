@@ -9,9 +9,14 @@ dependencies = [
 #    "qt-extensions @ https://github.com/beatreichenbach/qt-extensions/archive/refs/heads/main.zip",
 #    "PySide2",
 #    "numpy",
-#    "pyopencl"
+#    "pyopencl",
+#    "torch",
+#    "torchvision",
+#    "opencolorio",
+#    "opencv-python-headless",
+#    "einops",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.9, <3.11"
 license = {text = "MIT"}
 readme = "README.md"
 

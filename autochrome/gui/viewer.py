@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import enum
 import logging
+from typing import Any
 
 import numpy as np
 
-# import PyOpenColorIO as OCIO
+import PyOpenColorIO as OCIO
 from PySide2 import QtWidgets, QtCore
 
 from qt_extensions import helper
@@ -16,20 +17,19 @@ from qt_extensions.viewer import Viewer
 
 from autochrome.storage import Storage
 
-# from autochrome.utils import ocio
+from autochrome.utils import ocio
 
 logger = logging.getLogger(__name__)
 storage = Storage()
 
 
 class ElementViewer(Viewer):
-    # Note: Setting Signal type to RenderElement crashes in Qt5.15.13
-    element_changed: QtCore.Signal = QtCore.Signal(enum.Enum)
+    element_changed: QtCore.Signal = QtCore.Signal(RenderElement)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._element = RenderElement.GRAIN
+        self._element = RenderElement.SPECTRAL
 
         self.element_parm = EnumParameter('element')
         self.element_parm.set_enum(RenderElement)
@@ -39,9 +39,9 @@ class ElementViewer(Viewer):
         exposure_action = self.toolbar.find_action('exposure_toggle')
         self.toolbar.insertWidget(exposure_action, self.element_parm)
 
-        # self.view_processor = ocio.view_processor()
-        # if self.view_processor is not None:
-        #     self.post_processes.append(self._apply_rgb)
+        self.view_processor = ocio.view_processor()
+        if self.view_processor is not None:
+            self.post_processes.append(self._apply_rgb)
 
     @property
     def element(self) -> RenderElement:
@@ -57,17 +57,15 @@ class ElementViewer(Viewer):
         return state
 
     def set_state(self, state: dict) -> None:
-        values = {'element': RenderElement.STARBURST}
-        values.update(state)
-        super().set_state(values)
-        self.element = values['element']
+        super().set_state(state)
+        self.element = state.get('element')
 
     def _change_element(self, value) -> None:
         self._element = value
         self.element_changed.emit(self._element)
 
-    # def _apply_rgb(self, array: np.ndarray) -> None:
-    #     try:
-    #         self.view_processor.applyRGB(array)
-    #     except OCIO.Exception as e:
-    #         logging.debug(e)
+    def _apply_rgb(self, array: np.ndarray) -> None:
+        try:
+            self.view_processor.applyRGB(array)
+        except OCIO.Exception as e:
+            logging.debug(e)

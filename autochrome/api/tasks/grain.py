@@ -107,11 +107,9 @@ class GrainTask(OpenCL):
 
         image_array = self.load_file(image_file, resolution)
         image_array = np.dstack(
-            (
-                image_array,
-                np.zeros((image_array.shape[0], image_array.shape[1]), np.float32),
-            )
+            (image_array, np.zeros(image_array.shape[:2], np.float32))
         )
+        logger.debug(f'image_array_shape: {image_array.shape}')
         image = Image(self.context, image_array, args=str(image_file))
         logger.debug(image.shape)
 
@@ -154,6 +152,43 @@ class GrainTask(OpenCL):
         )
 
         return grain
+
+    def render_spectral(
+        self,
+        spectral: Buffer,
+        grain_mu: float,
+        grain_sigma: float,
+        blur_sigma: float,
+        samples: int,
+        seed_offset: int,
+    ) -> Image:
+        height, width, wavelength_count = spectral.shape
+
+        lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
+
+        global_work_size = (width, height)
+        local_work_size = None
+        cl.enqueue_nd_range_kernel(
+            self.queue, self.kernel, global_work_size, local_work_size
+        )
+        cl.enqueue_copy(
+            self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
+        )
+
+        return image
+
+    def run_spectral(self, project: Project, spectral: Buffer) -> Image:
+        image = self.render_grain(
+            image_file,
+            resolution=project.render.resolution,
+            grain_mu=project.grain.grain_mu,
+            grain_sigma=project.grain.grain_sigma,
+            blur_sigma=project.grain.blur_sigma,
+            samples=project.grain.samples,
+            seed_offset=project.grain.seed_offset,
+            bounds=bounds,
+        )
+        return image
 
     def run(self, project: Project) -> Image:
         image_file = File(project.input.image_path)

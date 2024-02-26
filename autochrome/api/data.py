@@ -26,7 +26,7 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/bike.jpg'
+    image_path: str = '/home/beat/dev/autochrome/input.jpg'
 
 
 @hashable_dataclass
@@ -47,13 +47,17 @@ class Spectral:
 
 @hashable_dataclass
 class Output:
-    pass
+    write: bool = False
+    element: RenderElement = RenderElement.SPECTRAL
+    path: str = '/home/beat/dev/autochrome/output.jpg'
+    colorspace: str = 'sRGB - Display'
+    frame: int = 0
 
 
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(1280, 720))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(512, 512))
 
     # system
     device: str = ''

@@ -5,7 +5,7 @@ import os
 from collections import OrderedDict
 from typing import Callable
 
-# import cv2
+import cv2
 import numpy as np
 import pyopencl as cl
 from PySide2 import QtCore
@@ -18,7 +18,7 @@ from autochrome.api.tasks.opencl import Image
 from autochrome.api.tasks.spectral import SpectralTask
 from autochrome.storage import Storage
 
-# from autochrome.utils import ocio
+from autochrome.utils import ocio
 from autochrome.utils.timing import timer
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ class Engine(QtCore.QObject):
         return image
 
     def grain(self, project: Project) -> Image:
+        spectral_buffer = self.spectral_task.run_buffer(project)
         image = self.grain_task.run(project)
         return image
 
@@ -69,7 +70,7 @@ class Engine(QtCore.QObject):
                 if renderer:
                     image = renderer(project)
                     self.emit_image(image, element)
-                    # self.write_image(image, element, project)
+                    self.write_image(image, element, project)
         except EngineError as e:
             logger.error(e)
         except cl.Error as e:
@@ -102,13 +103,13 @@ class Engine(QtCore.QObject):
             render_image = RenderImage(image, element)
             self.image_rendered.emit(render_image)
 
-    # def write_image(
-    #     self, image: Image, element: RenderElement, project: Project
-    # ) -> None:
-    #     if not project.output.write or element != project.output.element:
-    #         return
-    #     filename = storage.parse_output_path(project.output.path, project.output.frame)
-    #     write_array(image.array, filename, project.output.colorspace)
+    def write_image(
+        self, image: Image, element: RenderElement, project: Project
+    ) -> None:
+        if not project.output.write or element != project.output.element:
+            return
+        filename = storage.parse_output_path(project.output.path, project.output.frame)
+        write_array(image.array, filename, project.output.colorspace)
 
 
 def clear_cache() -> None:
@@ -119,17 +120,21 @@ def write_array(array: np.ndarray, filename: str, colorspace: str) -> None:
     array = array.copy()
 
     # colorspace
-    # processor = ocio.colorspace_processor(colorspace)
-    # if processor:
-    #     processor.applyRGBA(array)
+    processor = ocio.colorspace_processor(dst_name=colorspace)
+    if processor:
+        processor.applyRGBA(array)
 
-    # try:
-    #     if not os.path.isdir(os.path.dirname(filename)):
-    #         os.makedirs(os.path.dirname(filename))
-    #     image_bgr = cv2.cvtColor(array, cv2.COLOR_RGBA2BGR)
-    #     cv2.imwrite(filename, image_bgr)
-    #     logger.info('image written: {}'.format(filename))
-    # except (OSError, ValueError, cv2.error) as e:
-    #     logger.debug(e)
-    #     message = f'Error writing file: {filename}'
-    #     raise RealflareError(message) from None
+    # 8bit
+    if not filename.endswith('.exr'):
+        array *= 255
+
+    try:
+        if not os.path.isdir(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        image_bgr = cv2.cvtColor(array, cv2.COLOR_RGBA2BGR)
+        cv2.imwrite(filename, image_bgr)
+        logger.info('image written: {}'.format(filename))
+    except (OSError, ValueError, cv2.error) as e:
+        logger.debug(e)
+        message = f'Error writing file: {filename}'
+        raise EngineError(message) from None

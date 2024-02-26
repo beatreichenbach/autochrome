@@ -14,6 +14,7 @@ from PySide2 import QtCore, QtGui, QtWidgets
 from autochrome.api.data import Project, RenderImage
 from autochrome.api.engine import Engine, clear_cache
 from autochrome.gui.parameters import ProjectEditor
+from autochrome.gui.settings import SettingsDialog
 from autochrome.gui.viewer import ElementViewer
 from autochrome.storage import Storage
 
@@ -153,12 +154,12 @@ class MainWindow(DockWindow):
         self.recent_menu = file_menu.addMenu('Open Recent...')
         file_menu.addSeparator()
 
-        # action = QtWidgets.QAction('Settings...', self)
-        # action.setShortcut(QtGui.QKeySequence('Ctrl+Alt+S'))
-        # action.setIcon(MaterialIcon('settings'))
-        # action.triggered.connect(lambda: self.settings_open())
-        # file_menu.addAction(action)
-        # file_menu.addSeparator()
+        action = QtWidgets.QAction('Settings...', self)
+        action.setShortcut(QtGui.QKeySequence('Ctrl+Alt+S'))
+        action.setIcon(MaterialIcon('settings'))
+        action.triggered.connect(lambda: self.settings_open())
+        file_menu.addAction(action)
+        file_menu.addSeparator()
 
         # action = QtWidgets.QAction('Save', self)
         # action.setIcon(MaterialIcon('save'))
@@ -225,6 +226,37 @@ class MainWindow(DockWindow):
         # connect signals when new widgets are added
         self.widget_added.connect(self._widget_added)
 
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        # project
+        self._test_changes(quick=False)
+        if self._project_changed:
+            result = QtWidgets.QMessageBox.warning(
+                self,
+                'Save Changes?',
+                'Project has been modified, save changes?',
+                QtWidgets.QMessageBox.Yes
+                | QtWidgets.QMessageBox.No
+                | QtWidgets.QMessageBox.Cancel,
+            )
+            if result == QtWidgets.QMessageBox.Yes:
+                # if not self.file_save():
+                #     event.ignore()
+                #     return
+                pass
+            elif result == QtWidgets.QMessageBox.No:
+                pass
+            else:
+                event.ignore()
+                return
+
+        # engine
+        self._api_thread.quit()
+
+        # state
+        self.save_state()
+
+        super().closeEvent(event)
+
     def load_state(self) -> None:
         # window state
         if storage.state.window_state:
@@ -243,6 +275,13 @@ class MainWindow(DockWindow):
     def refresh(self) -> None:
         self._update_elements()
         self.request_render(self.project)
+
+    def render_to_disk(self) -> None:
+        self.elements_changed.emit([self.project.output.element])
+        self.project.output.write = True
+        self.request_render(self.project)
+        self.project.output.write = False
+        self._update_elements()
 
     def reset_window_state(self) -> None:
         self.set_window_state(self.default_window_state)
@@ -289,6 +328,10 @@ class MainWindow(DockWindow):
         for title, widget in self._widgets.items():
             if isinstance(widget, ProjectEditor):
                 widget.set_project(self.project)
+
+    def settings_open(self) -> None:
+        dialog = SettingsDialog(parent=self)
+        dialog.open()
 
     def show_splash_message(self, message: str) -> None:
         if isinstance(self.splash_screen, QtWidgets.QSplashScreen):
@@ -351,7 +394,7 @@ class MainWindow(DockWindow):
             widget.parameter_changed.connect(
                 lambda: self._project_editor_changed(widget)
             )
-            # widget.render_to_disk.triggered.connect(self.render_to_disk)
+            widget.render_to_disk.triggered.connect(self.render_to_disk)
         elif isinstance(widget, LogViewer):
             widget.set_cache(self.log_cache)
 
@@ -430,7 +473,7 @@ class MainWindow(DockWindow):
             widget.parameter_changed.connect(
                 lambda: self._project_editor_changed(widget)
             )
-            # widget.render_to_disk.triggered.connect(self.render_to_disk)
+            widget.render_to_disk.triggered.connect(self.render_to_disk)
         elif isinstance(widget, LogViewer):
             widget.set_cache(self.log_cache)
 
@@ -460,11 +503,6 @@ def init_app() -> QtWidgets.QApplication:
     # theme
     theme.apply_theme(theme.monokai)
 
-    font = app.font()
-    font_size = font.pointSize() * 0.75
-    font.setPointSize(font_size)
-    app.setFont(font)
-
     return app
 
 
@@ -493,4 +531,8 @@ def exec_():
 if __name__ == '__main__':
     logging.basicConfig()
     os.environ['OPENCL_REBUILD'] = '1'
+    os.environ['OCIO'] = (
+        '/home/beat/Downloads/cg-config-v2.1.0_aces-v1.3_ocio-v2.3.ocio'
+    )
+    os.environ['OCIO_INACTIVE_COLORSPACES'] = ''
     exec_()
