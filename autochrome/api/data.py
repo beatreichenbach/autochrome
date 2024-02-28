@@ -26,7 +26,7 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/input.jpg'
+    image_path: str = '/home/beat/dev/autochrome/input2.jpg'
 
 
 @hashable_dataclass

@@ -13,12 +13,15 @@ from torch import nn
 from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
 from autochrome.api.tasks.mst_plus_plus import MST_Plus_Plus
+from autochrome.api.tasks import reproject
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
 from autochrome.utils import ocio
 from autochrome.utils.ciexyz import CIEXYZ
 from autochrome.utils.timing import timer
 
 logger = logging.getLogger(__name__)
+
+RESOURCES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'resources')
 
 
 class Center(enum.Enum):
@@ -123,7 +126,7 @@ class SpectralTask(OpenCL):
 
         spectral_array = torch_result.cpu().numpy()
         spectral_array = np.transpose(np.squeeze(spectral_array), [1, 2, 0])
-        # spectral_array = np.clip(spectral_array, 0, 1)
+        spectral_array = np.clip(spectral_array, 0, 1)
 
         return spectral_array
 
@@ -142,6 +145,26 @@ class SpectralTask(OpenCL):
             for y in range(height):
                 for x in range(width):
                     output[y, x] += rgb * spectral_array[y, x, w]
+
+        # return image
+        image = Image(self.context, array=output)
+        return image
+
+    @timer
+    def update_preview2(self, spectral_array: np.ndarray) -> Image:
+        height, width, lambda_count = spectral_array.shape
+        logger.debug(f'lambda_count: {lambda_count}')
+        lambda_min = 400
+        lambda_max = 700
+        cube_bands = reproject.make_spectral_bands(lambda_min, lambda_max, 10)
+        filter_path = os.path.join(RESOURCES_DIR, 'filters', 'RGB_Camera_QE.csv')
+        rgb_filter = reproject.load_rgb_filter2(filter_path, cube_bands)
+        output = reproject.project_hs(
+            spectral_array, cube_bands, rgb_filter, cube_bands, clip_negative=True
+        )
+        logger.debug(f'output_shape: {output.shape}')
+        output = np.float32(output)
+        output *= reproject.TYPICAL_SCENE_REFLECTIVITY
 
         # return image
         image = Image(self.context, array=output)
@@ -179,16 +202,21 @@ class SpectralTask(OpenCL):
         image_delta = image.array.max() - image.array.min()
         logger.debug(f'image_min: {image_min}')
         logger.debug(f'image_delta: {image_delta}')
+        mean_value = np.mean(image.array)
+        logger.debug(f'mean_value: {mean_value}')
 
         model = self.update_model(model_path)
         spectral_array = self.update_spectral_array(image, model, ensemble_center)
-        image = self.update_preview(spectral_array)
-        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        image = self.update_preview2(spectral_array)
+        mean_value2 = np.mean(image.array)
+        logger.debug(f'mean_value2: {mean_value2}')
 
-        # processor = ocio.colorspace_processor(src_name='sRGB - Display')
+        # processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        processor = ocio.colorspace_processor(src_name='sRGB - Display')
 
-        array = image.array * image_delta - image_min
-        array *= 1 / 2**4
+        array = image.array
+        # array = image.array * image_delta - image_min
+        array *= mean_value / mean_value2
         # add alpha channel
         array = np.dstack((array, np.zeros(array.shape[:2], np.float32)))
         if processor:
@@ -200,14 +228,7 @@ class SpectralTask(OpenCL):
     def run_buffer(self, project: Project) -> Buffer:
         image_file = File(project.input.image_path)
         resolution = project.render.resolution
-        model_path = os.path.join(
-            os.path.dirname(__file__),
-            '..',
-            '..',
-            'resources',
-            'models',
-            'mst_plus_plus.pth',
-        )
+        model_path = os.path.join(RESOURCES_DIR, 'models', 'mst_plus_plus.pth')
         ensemble_center = Center.mean
         buffer = self.spectral_buffer(
             image_file, resolution, model_path, ensemble_center
@@ -217,14 +238,7 @@ class SpectralTask(OpenCL):
     def run(self, project: Project) -> Image:
         image_file = File(project.input.image_path)
         resolution = project.render.resolution
-        model_path = os.path.join(
-            os.path.dirname(__file__),
-            '..',
-            '..',
-            'resources',
-            'models',
-            'mst_plus_plus.pth',
-        )
+        model_path = os.path.join(RESOURCES_DIR, 'models', 'mst_plus_plus.pth')
         ensemble_center = Center.mean
         image = self.spectral_image(image_file, resolution, model_path, ensemble_center)
         return image

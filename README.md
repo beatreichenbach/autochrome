@@ -49,3 +49,7 @@ lambda_u = -((cell_size * cell_size) / area) * np.log(1 - u)
 print(lambda_u)
 print(np.exp(-lambda_u))
 ```
+
+https://github.com/caiyuanhao1998/MST-plus-plus
+
+https://github.com/boazarad/NTIRE2022_spectral
