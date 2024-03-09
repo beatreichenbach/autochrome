@@ -23,6 +23,10 @@ def sigmoid(x: float) -> float:
     return 0.5 + x / (2 * np.sqrt(1.0 + x * x))
 
 
+def smoothstep(x: float) -> float:
+    return x * x * (3.0 - 2.0 * x)
+
+
 def xy_to_xyy(xy: np.ndarray, y: float = 1) -> np.ndarray:
     xyy = np.hstack((xy, y))
     return xyy
@@ -30,9 +34,32 @@ def xy_to_xyy(xy: np.ndarray, y: float = 1) -> np.ndarray:
 
 def xyy_to_xyz(xyy: np.ndarray) -> np.ndarray:
     xyz = np.array(
-        (xyy[0] * xyy[2] / xyy[1], xyy[2], (1 - xyy[0] - xyy[1]) * xyy[2] / xyy[1])
+        (
+            xyy[0] * xyy[2] / xyy[1],
+            xyy[2],
+            (1 - xyy[0] - xyy[1]) * xyy[2] / xyy[1],
+        )
     )
     return xyz
+
+
+def xyz_to_xyy(xyz: np.ndarray) -> np.ndarray:
+    xyy = np.array(
+        (
+            xyz[0] / np.sum(xyz),
+            xyz[1] / np.sum(xyz),
+            xyz[1],
+        )
+    )
+    return xyy
+
+
+def xyy_to_xy(xyy: np.ndarray) -> np.ndarray:
+    return xyy[:2]
+
+
+def xyz_to_xy(xyz: np.ndarray) -> np.ndarray:
+    return xyy_to_xy(xyz_to_xyy(xyz))
 
 
 def xyz_to_lab(xyz: np.ndarray, illuminant: np.ndarray) -> np.array:
@@ -70,10 +97,78 @@ def xyz_to_lab(xyz: np.ndarray, illuminant: np.ndarray) -> np.array:
 #         for j in range(res):
 
 
+def eval_residual(coeffs: np.ndarray, rgb: np.ndarray) -> float:
+    xyz = np.ndarray((3,))
+    for i in range(LAMBDA_COUNT):
+        # lambda to 0..1 range
+        lambda_ = (lambdas[i] - LAMBDA_MIN) / (LAMBDA_MAX - LAMBDA_MIN)
+
+        # polynomial
+        x = 0
+        for j in range(3):
+            x = x * lambda_ + coeffs[j]
+
+        # sigmoid
+        s = sigmoid(x)
+
+        # integrate against precomputed curves
+        for k in range(3):
+            xyz[k] += rgb_table[k][i] * s
+
+        lab = xyz_to_lab(xyz)
+        residual = xyz_to_lab(rgb)
+
+        residual -= lab
+
+
+EPSILON = 0.0001
+
+
+def eval_jacobian(coeffs: np.ndarray, rgb: np.ndarray) -> float:
+    jacobian = np.ndarray((3, 3))
+    for i in range(3):
+        tmp = coeffs.copy()
+        tmp[i] -= EPSILON
+        r0 = eval_residual(tmp, rgb)
+
+        tmp = coeffs.copy()
+        tmp[i] += EPSILON
+        r1 = eval_residual(tmp, rgb)
+
+        for j in range(3):
+            jacobian[j][i] = (r1[j] - r0[j]) * 1 / (2 * EPSILON)
+
+    return jacobian
+
+
+def gauss_newton(rgb: np.ndarray, coeffs: np.ndarray, iterations=15) -> float:
+    r = 0
+    for i in range(iterations):
+        residual = eval_residual(coeffs, rgb)
+        J = eval_jacobian(coeffs, rgb)
+
+
 def solve_coefficients(
     xyz: np.ndarray, cmfs: np.ndarray, illuminant: np.ndarray
 ) -> np.ndarray:
+    xy_n = xyz_to_xy()
     coefficients = np.ndarray([0, 0, 0])
+    resolution = 3
+
+    scale = [smoothstep(smoothstep(k / (resolution - 1))) for k in range(resolution)]
+
+    for l in range(3):
+        for j in range(resolution):
+            y = j / (resolution - 1)
+            for i in range(resolution):
+                x = i / (resolution - 1)
+                start = resolution / 5
+
+                for k in range(resolution):
+                    b = scale[k]
+
+                    rgb = np.array((b, x * b, y * b))
+                    res_id = gauss_newton(rgb, coeffs)
     return coefficients
 
 
@@ -110,15 +205,15 @@ def main():
     illuminant = np.interp(wavelengths, illuminant_keys, illuminant_values)
     #     logger.info(illuminant)
 
-    combined_spectrum = cmfs * illuminant[:, np.newaxis]
-    integral = np.trapz(combined_spectrum, axis=0)
-    whitepoint = integral / np.sum(integral)
+    # combined_spectrum = cmfs * illuminant[:, np.newaxis]
+    # integral = np.trapz(combined_spectrum, axis=0)
+    # whitepoint = integral / np.sum(integral)
     # whitepoint = np.mean(combined_spectrum / 100, axis=0)
 
     # chromacity coordinates
     chromacity_coordinates = np.array(COORDS['D65'])
 
-    logger.info(whitepoint)
+    # logger.info(whitepoint)
 
     # xyz
     xyz = np.array([0.2, 0.4, 0.6])
