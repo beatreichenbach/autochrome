@@ -58,3 +58,4 @@ https://github.com/boazarad/NTIRE2022_spectral
 https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf
 https://github.com/alasdairnewson/film_grain_rendering_gpu/blob/5695ff2abea762c90740a0ae309336dc9be4cd95/src/film_grain_rendering.cu
 https://github.com/mitsuba-renderer/rgb2spec
+https://github.com/nbvdkamp/rgb2spec-rs
