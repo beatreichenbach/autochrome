@@ -91,7 +91,7 @@ def eval_residual(coeffs: np.ndarray, xyz: np.ndarray) -> np.ndarray:
     out = np.zeros(3)
 
     fine_samples = LAMBDA_COUNT
-    lambdas = np.linspace(LAMBDA_MIN, LAMBDA_MAX, fine_samples)
+    # lambdas = np.linspace(LAMBDA_MIN, LAMBDA_MAX, fine_samples)
 
     for i in range(fine_samples):
         # lambda to 0..1 range
@@ -219,7 +219,8 @@ def optimize(resolution: int) -> np.ndarray:
     data_shape = (3, resolution, resolution, resolution, 3)
     data = np.ndarray(data_shape)
 
-    # l = channels (r,g,b)/(x,y,z)
+    # l = channels (r,g,b)/(x,y,z) ?
+    # shape (l, k, j, i, coeffs)
     for l in range(3):
         for j in range(resolution):
             y = j / (resolution - 1)
@@ -232,7 +233,12 @@ def optimize(resolution: int) -> np.ndarray:
                     coefficients = np.zeros(3)
                     step = 1 if end > start else -1
                     for k in range(start, end, step):
-                        xyz = np.array((1, x, y)) * scale[k]
+                        b = scale[k]
+                        xyz = np.zeros(3)
+                        xyz[l] = b
+                        xyz[(l + 1) % 3] = x * b
+                        xyz[(l + 2) % 3] = y * b
+
                         coefficients = gauss_newton(xyz, coefficients)
                         # logger.debug(coefficients)
 
@@ -305,6 +311,101 @@ def get_whitepoint(cmfs: np.ndarray, illuminant: np.ndarray) -> np.ndarray:
     return xyz_whitepoint
 
 
+def find_interval(values: list[float], resolution: int, x: float) -> int:
+    # this is just an algorithm to the index that is closest to x in values.
+    left = 0
+    last_interval = resolution - 2
+    size = last_interval
+
+    while size > 0:
+        half = int(size / 2)
+
+        middle = left + half + 1
+
+        if values[middle] <= x:
+            left = middle
+            size -= half + 1
+        else:
+            size = half
+    interval = min(last_interval, left)
+
+    return interval
+
+
+def fetch(xyz: np.ndarray) -> np.ndarray:
+    # returns three coefficients
+    # xyz must be 0..1
+    coefficients_count = 3
+
+    model = np.load('model.npy')
+    resolution = model.shape[1]
+
+    i = 0
+
+    for j in range(1, 3):
+        if xyz[j] >= xyz[i]:
+            i = j
+
+    z = xyz[i]
+    # prevent nan valeus for (0, 0, 0)
+    scale = (resolution - 1) / z if z > 0 else 0
+    x = xyz[(i + 1) % 3] * scale
+    y = xyz[(i + 2) % 3] * scale
+
+    # trilinearly interpolated lookup
+
+    scale = [smoothstep(smoothstep(k / (resolution - 1))) for k in range(resolution)]
+    xi = min(x, resolution - 2)
+    yi = min(y, resolution - 2)
+    zi = find_interval(scale, resolution, z)
+
+    offset = (
+        int(((i * resolution + zi) * resolution + yi) * resolution + xi)
+        * coefficients_count
+    )
+
+    dx = coefficients_count
+    dy = coefficients_count * resolution
+    dz = coefficients_count * resolution**2
+
+    x1 = x - xi
+    x0 = 1 - x1
+    y1 = y - yi
+    y0 = 1 - y1
+    z1 = (z - scale[zi]) / (scale[zi + 1] - scale[zi])
+    z0 = 1 - z1
+
+    # turn into 1d array for lookup
+    model = np.ravel(model)
+
+    coefficients = np.zeros(coefficients_count)
+
+    for i in range(3):
+        tmp1 = (model[offset] * x0 + model[offset + dx] * x1) * y0
+        tmp1 += (model[offset + dy] * x0 + model[offset + dy + dx] * x1) * y1
+        tmp1 *= z0
+
+        tmp2 = (model[offset + dz] * x0 + model[offset + dz + dx] * x1) * y0
+        tmp2 += (model[offset + dz + dy] * x0 + model[offset + dz + dy + dx] * x1) * y1
+        tmp2 *= z1
+        coefficients[i] = tmp1 + tmp2
+        offset += 1
+
+    return coefficients
+
+
+def fma(a: float, b: float, c: float) -> float:
+    return a * b + c
+
+
+def eval_precise(coefficients: np.ndarray, wavelength: float) -> float:
+    # get spectral value for lambda based on coefficients
+    tmp = fma(coefficients[0], wavelength, coefficients[1])
+    x = fma(tmp, wavelength, coefficients[2])
+    y = 1 / np.sqrt(fma(x, x, 1))
+    return fma(0.5 * x, y, 0.5)
+
+
 # chromacity coordinates
 chromacity_coordinates = np.array(COORDS['D65'])
 whitepoint = xyy_to_xyz(xy_to_xyy(chromacity_coordinates))
@@ -347,15 +448,19 @@ def main():
     # logger.info(f'whitepoint_d65: {xyy_to_xyz(xy_to_xyy(chromacity_coordinates))}')
 
     # xyz
-    xyz = np.array([0.2, 0.4, 0.6])
+    xyz = np.array([0.7, 0.3, 0.4])
     logger.info(xyz)
 
     # lab = xyz_to_lab(xyz, illuminant=chromacity_coordinates)
     # logger.info(lab)
 
-    resolution = 16
-    model = optimize(resolution)
-    logger.debug(model)
+    # resolution = 16
+    # model = optimize(resolution)
+    # np.save('model.npy', model)
+
+    coefficients = fetch(xyz)
+    logger.info(coefficients)
+    sd_rgb2spec = [eval_precise(coefficients, l) for l in lambdas]
 
     # test lu decomposition
     # a = np.array([[1, 2, 2], [4, 4, 2], [4, 6, 4]], np.float32)
@@ -373,24 +478,27 @@ def main():
     # logger.info(xyz)
 
     # colour
-    # import colour
-    # cmfs_cie_2 = colour.MSDS_CMFS['CIE 1931 2 Degree Standard Observer']
-    # spectral_shape = colour.SpectralShape(400, 700, 20)
-    # cmfs = cmfs_cie_2.copy().align(spectral_shape)
-    #
-    # illuminant = colour.SDS_ILLUMINANTS['D65'].copy().align(cmfs.shape)
-    #
-    # sd = colour.XYZ_to_sd(xyz, method='Jakob 2019', cmfs=cmfs, illuminant=illuminant)
-    # sd_to_xyz = colour.sd_to_XYZ(sd, cmfs=cmfs, illuminant=illuminant) / 100
-    #
-    # logger.info(f'xyz: {xyz}')
-    # logger.info(f'sd_to_xyz: {sd_to_xyz}')
-    # logger.info(f'sd: {sd.values}')
-    #
-    # output = '\n'
-    # for i in range(len(cmfs.wavelengths)):
-    #     output += f'{cmfs.wavelengths[i]}\t{sd.values[i]}\n'
-    # logger.info(output)
+    import colour
+
+    cmfs_cie_2 = colour.MSDS_CMFS['CIE 1931 2 Degree Standard Observer']
+    spectral_shape = colour.SpectralShape(LAMBDA_MIN, LAMBDA_MAX, LAMBDA_COUNT - 1)
+    cmfs = cmfs_cie_2.copy().align(spectral_shape)
+
+    illuminant = colour.SDS_ILLUMINANTS['D65'].copy().align(cmfs.shape)
+
+    sd = colour.XYZ_to_sd(xyz, method='Jakob 2019', cmfs=cmfs, illuminant=illuminant)
+    sd_to_xyz = colour.sd_to_XYZ(sd, cmfs=cmfs, illuminant=illuminant) / 100
+
+    logger.info(f'xyz: {xyz}')
+    logger.info(f'sd_to_xyz: {sd_to_xyz}')
+    logger.info(f'sd: {sd.values}')
+
+    sd_colour = np.interp(lambdas, cmfs.wavelengths, sd.values)
+
+    output = '\n'
+    for i in range(len(lambdas)):
+        output += f'{lambdas[i]}\t{sd_colour[i]}\t{sd_rgb2spec[i]}\n'
+    logger.info(output)
 
 
 if __name__ == '__main__':
