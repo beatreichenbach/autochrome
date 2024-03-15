@@ -26,7 +26,7 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/input2.jpg'
+    image_path: str = '/home/beat/dev/autochrome/data/input2.jpg'
 
 
 @hashable_dataclass
@@ -57,7 +57,7 @@ class Output:
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(512, 512))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(32, 32))
 
     # system
     device: str = ''

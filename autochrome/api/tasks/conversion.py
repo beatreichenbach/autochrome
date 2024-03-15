@@ -308,6 +308,7 @@ def fetch(xyz: np.ndarray) -> np.ndarray:
     coefficients_count = 3
 
     model = np.load('model.npy')
+    logger.info(f'model: {model[0:4]}')
     # resolution = model.shape[1]
 
     i = 0
@@ -324,11 +325,11 @@ def fetch(xyz: np.ndarray) -> np.ndarray:
     # trilinearly interpolated lookup
 
     scale = [smoothstep(smoothstep(k / (resolution - 1))) for k in range(resolution)]
-    logger.debug((x, int(x)))
-    logger.debug((y, int(y)))
+    logger.info(f'scale: {scale[0:4]}')
     xi = min(int(x), resolution - 2)
     yi = min(int(y), resolution - 2)
     zi = find_interval(scale, resolution, z)
+    logger.debug(f'find_interval: {find_interval(scale, resolution, 0.9999)}')
 
     offset = (
         int(((i * resolution + zi) * resolution + yi) * resolution + xi)
@@ -534,6 +535,7 @@ def main():
     srgb = np.array([0.9, 0.1, 0.6])
     srgb = np.array([0.2, 0.8, 0.3])
     srgb = np.array([0.6, 0.4, 0.1])
+    srgb = np.array([1.0, 1.0, 1.0])
     xyz = colour.sRGB_to_XYZ(srgb)
     logger.info(f'xyz: {xyz}')
 
@@ -546,7 +548,10 @@ def main():
     # np.save('model.npy', model)
 
     coefficients = fetch(xyz)
+    logger.info(f'coefficients: {coefficients}')
     sd_rgb2spec = np.array([eval_precise(coefficients, l) for l in lambdas])
+
+    logger.info(f'eval_precise: {eval_precise(coefficients, lambdas[3])}')
 
     # coefficients = np.zeros(3)
     # coefficients = gauss_newton(xyz, coefficients)
@@ -557,11 +562,21 @@ def main():
     #     ]
     # )
 
-    k = 1 / (np.sum(cmfs * illuminant[:, np.newaxis], axis=0))
-    sd_to_xyz_rgb2spec = k * np.dot(sd_rgb2spec * illuminant, cmfs)
+    k = np.sum(cmfs * illuminant[:, np.newaxis], axis=0)
+    xyz_dot = np.dot(sd_rgb2spec * illuminant, cmfs) / k
 
+    xyz_ = np.zeros(3, np.float64)
+    k = 0
+    for i in range(len(sd_rgb2spec)):
+        a = cmfs[i] * illuminant[i]
+        k += a
+        xyz_ += a * sd_rgb2spec[i]
+    logger.info(f'xyz_: {xyz_}')
+    logger.info(f'k: {k}')
+    xyz_sum = xyz_ / k
     logger.info(f'rgb2spec xyz    : {xyz}')
-    logger.info(f'rgb2spec xyz(cu): {sd_to_xyz_rgb2spec}')
+    logger.info(f'rgb2spec xyz(cu): {xyz_sum}')
+    logger.info(f'rgb2spec xyz(do): {xyz_dot}')
 
     # lab
     # illuminant = colour.CCS_ILLUMINANTS["CIE 1931 2 Degree Standard Observer"]["E"]

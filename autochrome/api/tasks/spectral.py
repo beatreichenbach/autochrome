@@ -1,79 +1,67 @@
-import enum
-import itertools
 import logging
 import os.path
 from functools import lru_cache
 
 import cv2
 import numpy as np
-import torch
+import pyopencl as cl
 from PySide2 import QtCore
-from torch import nn
 
 from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
-from autochrome.api.tasks.mst_plus_plus import MST_Plus_Plus
-from autochrome.api.tasks import reproject
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
+from autochrome.data.cmfs import CMFS
+from autochrome.data.illuminants import ILLUMINANTS_CIE
 from autochrome.utils import ocio
-from autochrome.utils.ciexyz import CIEXYZ
 from autochrome.utils.timing import timer
 
 logger = logging.getLogger(__name__)
 
-RESOURCES_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'resources')
+
+LAMBDA_MIN = 390
+LAMBDA_MAX = 830
+LAMBDA_COUNT = 21
+
+COEFFICIENTS_COUNT = 3
 
 
-class Center(enum.Enum):
-    median = enum.auto()
-    mean = enum.auto()
+def smoothstep(x: float) -> float:
+    return x**2 * (3.0 - 2.0 * x)
 
 
-def _transform(
-    data: torch.Tensor,
-    flip_x: bool,
-    flip_y: bool,
-    transpose: bool,
-    reverse: bool = False,
-) -> torch.Tensor:
-    if not reverse:
-        if flip_x:
-            data = torch.flip(data, [3])
-        if flip_y:
-            data = torch.flip(data, [2])
-        if transpose:
-            data = torch.transpose(data, 2, 3)
-    else:
-        if transpose:
-            data = torch.transpose(data, 2, 3)
-        if flip_y:
-            data = torch.flip(data, [2])
-        if flip_x:
-            data = torch.flip(data, [3])
-    return data
+def normalize_image(image: Image) -> tuple:
+    min_val = np.min(image.array)
+    max_val = np.max(image.array)
+    image._array = (image.array - min_val) / (max_val - min_val)
+    return min_val, max_val
 
 
-def _forward_ensemble(
-    tensor: torch.Tensor, model: nn.Module, center: Center = Center.mean
-) -> torch.Tensor:
-    outputs = []
-    options = itertools.product((False, True), (False, True), (False, True))
-    for flip_x, flip_y, transpose in options:
-        data = tensor.clone()
-        data = _transform(data, flip_x, flip_y, transpose)
-        data = model(data)
-        data = _transform(data, flip_x, flip_y, transpose, reverse=True)
-        outputs.append(data)
-
-    if center == Center.mean:
-        return torch.stack(outputs, 0).mean(0)
-    elif center == Center.median:
-        return torch.stack(outputs, 0).median(0)[0]
-    else:
-        ValueError(f'Unsupported center: {center}')
+def un_normalize_image(image: Image, min_val: np.ndarray, max_val: np.ndarray) -> None:
+    image._array = image.array * (max_val - min_val) + min_val
 
 
 class SpectralTask(OpenCL):
+    def __init__(self, queue) -> None:
+        super().__init__(queue)
+        self.kernels = {}
+        self.build()
+
+    def build(self, *args, **kwargs) -> None:
+        self.source = ''
+        self.source += f'#define LAMBDA_COUNT {LAMBDA_COUNT}\n'
+        self.source += f'#define COEFFICIENTS_COUNT {COEFFICIENTS_COUNT}\n'
+
+        # self.register_dtype('Ray', ray_dtype)
+
+        # self.source += f'__constant int BIN_SIZE = {self.bin_size};\n'
+        # self.source += f'__constant int LAMBDA_MIN = {LAMBDA_MIN};\n'
+        # self.source += f'__constant int LAMBDA_MAX = {LAMBDA_MAX};\n'
+        self.source += self.read_source_file('jakob.cl')
+
+        super().build()
+
+        self.kernel = cl.Kernel(self.program, 'xyz_to_xyz')
+
     @lru_cache(1)
     def load_file(self, file: File, resolution: QtCore.QSize) -> Image:
         # load array
@@ -94,98 +82,79 @@ class SpectralTask(OpenCL):
         # resize array
         array = cv2.resize(array, (resolution.width(), resolution.height()))
 
+        array = np.dstack((array, np.zeros(array.shape[:2], np.float32)))
+
         # return image
         image = Image(self.context, array=array, args=(file, resolution))
         return image
 
     @lru_cache(1)
-    def update_model(self, model_path: str | None = None) -> nn.Module:
-        model = MST_Plus_Plus().cuda()
-        if model_path is not None:
-            logger.info(f'Loading model from: {model_path}')
-            checkpoint = torch.load(model_path)
-            state_dict = {
-                k.replace('module.', ''): v for k, v in checkpoint['state_dict'].items()
-            }
-            model.load_state_dict(state_dict, strict=True)
-        return model.cuda()
+    def update_model(self) -> Buffer:
+        model_path = '/home/beat/dev/autochrome/autochrome/api/tasks/model.npy'
+        model_file = File(model_path)
+        values = np.load(model_path)
+        model = np.zeros(len(values), cl.cltypes.float)
+        for i in range(len(values)):
+            model[i] = values[i]
 
-    @timer
-    def update_spectral_array(
-        self, image: Image, model: nn.Module, ensemble_center: Center.mean
-    ) -> np.ndarray:
-        rgb = image.array
-        rgb_normalized = (rgb - rgb.min()) / (rgb.max() - rgb.min())
-        rgb_aligned = np.expand_dims(np.transpose(rgb_normalized, [2, 0, 1]), axis=0)
+        buffer = Buffer(self.context, array=model, args=model_file)
+        return buffer
 
-        torch_rgb = torch.from_numpy(rgb_aligned).float().cuda()
-        with torch.no_grad():
-            torch_result = _forward_ensemble(
-                tensor=torch_rgb, model=model, center=ensemble_center
-            )
-
-        spectral_array = torch_result.cpu().numpy()
-        spectral_array = np.transpose(np.squeeze(spectral_array), [1, 2, 0])
-        spectral_array = np.clip(spectral_array, 0, 1)
-
-        return spectral_array
-
-    @timer
-    def update_preview(self, spectral_array: np.ndarray) -> Image:
-        height, width, lambda_count = spectral_array.shape
-        logger.debug(f'lambda_count: {lambda_count}')
-        rgb_dict = {w: np.float32((r, g, b)) for (w, r, g, b) in CIEXYZ}
-        lambda_min = 400
-        lambda_max = 700
-        lambda_values = np.linspace(lambda_min, lambda_max, lambda_count)
-        image_shape = (height, width, 3)
-        output = np.zeros(image_shape, np.float32)
-        for w in range(lambda_count):
-            rgb = rgb_dict[lambda_values[w]]
-            for y in range(height):
-                for x in range(width):
-                    output[y, x] += rgb * spectral_array[y, x, w]
-
-        # return image
-        image = Image(self.context, array=output)
-        return image
-
-    @timer
-    def update_preview2(self, spectral_array: np.ndarray) -> Image:
-        height, width, lambda_count = spectral_array.shape
-        logger.debug(f'lambda_count: {lambda_count}')
-        lambda_min = 400
-        lambda_max = 700
-        cube_bands = reproject.make_spectral_bands(lambda_min, lambda_max, 10)
-        filter_path = os.path.join(RESOURCES_DIR, 'filters', 'RGB_Camera_QE.csv')
-        rgb_filter = reproject.load_rgb_filter2(filter_path, cube_bands)
-        output = reproject.project_hs(
-            spectral_array, cube_bands, rgb_filter, cube_bands, clip_negative=True
-        )
-        logger.debug(f'output_shape: {output.shape}')
-        output = np.float32(output)
-        output *= reproject.TYPICAL_SCENE_REFLECTIVITY
-
-        # return image
-        image = Image(self.context, array=output)
-        return image
-
-    @timer
     @lru_cache(1)
-    def spectral_buffer(
-        self,
-        image_file: File,
-        resolution: QtCore.QSize,
-        model_path: str | None,
-        ensemble_center: Center.mean,
+    def update_lambdas(
+        self, lambda_min: int, lambda_max: int, lambda_count: int
     ) -> Buffer:
-        image = self.load_file(image_file, resolution)
-        model = self.update_model(model_path)
-        array = self.update_spectral_array(image, model, ensemble_center)
-        spectral = Buffer(
-            self.context, array=array, args=(image, model, ensemble_center)
-        )
-        return spectral
+        # lambdas = np.linspace(lambda_min, lambda_max, lambda_count)
+
+        lambdas = np.zeros(LAMBDA_COUNT, cl.cltypes.float)
+        values = np.linspace(lambda_min, lambda_max, lambda_count)
+        for i in range(LAMBDA_COUNT):
+            lambdas[i] = values[i]
+
+        args = (lambda_min, lambda_max, lambda_count)
+        buffer = Buffer(self.context, array=lambdas, args=args)
+        return buffer
+
+    @lru_cache(1)
+    def update_cmfs(self, lambdas: Buffer) -> Buffer:
+        cmfs_data = CMFS['CIE 2015 2 Degree Standard Observer']
+        cmfs_keys = np.array(list(cmfs_data.keys()))
+        cmfs_values = np.array(list(cmfs_data.values()))
+        cmfs = np.zeros(LAMBDA_COUNT, cl.cltypes.float4)
+        for i in range(3):
+            values = np.interp(lambdas.array, cmfs_keys, cmfs_values[:, i])
+            for j in range(LAMBDA_COUNT):
+                cmfs[j][i] = values[j]
+        buffer = Buffer(self.context, array=cmfs, args=lambdas)
+        return buffer
+
+    @lru_cache(1)
+    def update_illuminant(self, lambdas: Buffer) -> Buffer:
+        illuminant_data = ILLUMINANTS_CIE['D65']
+        illuminant_keys = np.array(list(illuminant_data.keys()))
+        illuminant_values = np.array(list(illuminant_data.values()))
+
+        # illuminant = np.interp(lambdas.array, illuminant_keys, illuminant_values)
+
+        illuminant = np.zeros(LAMBDA_COUNT, cl.cltypes.float)
+        values = np.interp(lambdas.array, illuminant_keys, illuminant_values)
+        for i in range(LAMBDA_COUNT):
+            illuminant[i] = values[i]
+
+        buffer = Buffer(self.context, array=illuminant, args=lambdas)
+        return buffer
+
+    @lru_cache(1)
+    def update_scale(self, resolution: int) -> Buffer:
+        values = [
+            smoothstep(smoothstep(k / (resolution - 1))) for k in range(resolution)
+        ]
+        scale = np.zeros(resolution, cl.cltypes.float)
+        for i in range(resolution):
+            scale[i] = values[i]
+
+        buffer = Buffer(self.context, array=scale, args=resolution)
+        return buffer
 
     @timer
     @lru_cache(1)
@@ -193,52 +162,63 @@ class SpectralTask(OpenCL):
         self,
         image_file: File,
         resolution: QtCore.QSize,
-        model_path: str | None,
-        ensemble_center: Center,
     ) -> Image:
+        if self.rebuild:
+            self.build()
         image = self.load_file(image_file, resolution)
-
-        image_min = image.array.min()
-        image_delta = image.array.max() - image.array.min()
-        logger.debug(f'image_min: {image_min}')
-        logger.debug(f'image_delta: {image_delta}')
-        mean_value = np.mean(image.array)
-        logger.debug(f'mean_value: {mean_value}')
-
-        model = self.update_model(model_path)
-        spectral_array = self.update_spectral_array(image, model, ensemble_center)
-        image = self.update_preview2(spectral_array)
-        mean_value2 = np.mean(image.array)
-        logger.debug(f'mean_value2: {mean_value2}')
-
-        # processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-        processor = ocio.colorspace_processor(src_name='sRGB - Display')
-
-        array = image.array
-        # array = image.array * image_delta - image_min
-        array *= mean_value / mean_value2
-        # add alpha channel
-        array = np.dstack((array, np.zeros(array.shape[:2], np.float32)))
-        if processor:
-            processor.applyRGBA(array)
-        image._array = array
-
-        return image
-
-    def run_buffer(self, project: Project) -> Buffer:
-        image_file = File(project.input.image_path)
-        resolution = project.render.resolution
-        model_path = os.path.join(RESOURCES_DIR, 'models', 'mst_plus_plus.pth')
-        ensemble_center = Center.mean
-        buffer = self.spectral_buffer(
-            image_file, resolution, model_path, ensemble_center
+        # image._array[:, :, :] = np.array([0.18069152, 0.16347412, 0.03151255, 0])
+        processor = ocio.colorspace_processor(
+            src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
         )
-        return buffer
+        processor.applyRGBA(image.array)
+
+        min_val, max_val = normalize_image(image)
+
+        model_resolution = 16
+        scale = self.update_scale(model_resolution)
+        lambdas = self.update_lambdas(LAMBDA_MIN, LAMBDA_MAX, LAMBDA_COUNT)
+        cmfs = self.update_cmfs(lambdas)
+        illuminant = self.update_illuminant(lambdas)
+        model = self.update_model()
+
+        # create output buffer
+        spectral = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
+        spectral.args = (resolution, model_resolution, image_file)
+        # image.clear_image()
+
+        # run program
+        self.kernel.set_arg(0, image.image)
+        self.kernel.set_arg(1, spectral.image)
+        self.kernel.set_arg(2, lambdas.buffer)
+        self.kernel.set_arg(3, cmfs.buffer)
+        self.kernel.set_arg(4, illuminant.buffer)
+        self.kernel.set_arg(5, model.buffer)
+        self.kernel.set_arg(6, scale.buffer)
+        self.kernel.set_arg(7, np.int32(model_resolution))
+
+        w, h = resolution.width(), resolution.height()
+        global_work_size = (w, h)
+        local_work_size = None
+        cl.enqueue_nd_range_kernel(
+            self.queue, self.kernel, global_work_size, local_work_size
+        )
+        cl.enqueue_copy(
+            self.queue, spectral.array, spectral.image, origin=(0, 0), region=(w, h)
+        )
+
+        un_normalize_image(spectral, min_val, max_val)
+
+        logger.debug(spectral.array[16, 16])
+
+        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        processor.applyRGBA(spectral.array)
+
+        logger.debug(spectral.array[16, 16])
+
+        return spectral
 
     def run(self, project: Project) -> Image:
         image_file = File(project.input.image_path)
         resolution = project.render.resolution
-        model_path = os.path.join(RESOURCES_DIR, 'models', 'mst_plus_plus.pth')
-        ensemble_center = Center.mean
-        image = self.spectral_image(image_file, resolution, model_path, ensemble_center)
+        image = self.spectral_image(image_file, resolution)
         return image
