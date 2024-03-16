@@ -113,6 +113,7 @@ __kernel void xyz_to_xyz(
     int y = get_global_id(1);
 
     float4 xyz = read_imagef(input, sampler, (int2)(x, y));
+    // xyz = (float4) (0.0F, 0.01F, 0.0F, 1);
 
     float4 coefficients = fetch(xyz, model, scale, resolution);
 
@@ -128,6 +129,6 @@ __kernel void xyz_to_xyz(
 
     xyz_reconstructed /= k;
     xyz_reconstructed.w = 0;
-    float4 rgba = xyz - xyz_reconstructed;
-    write_imagef(output, (int2)(x, y), xyz_reconstructed);
+    float4 rgba = fabs(xyz - xyz_reconstructed);
+    write_imagef(output, (int2)(x, y), rgba);
 }

@@ -462,7 +462,7 @@ def colour_xyz_to_sd(xyz: np.ndarray) -> colour.SpectralDistribution:
     spectral_shape = colour.SpectralShape(LAMBDA_MIN, LAMBDA_MAX, d_w)
     cmfs = cmfs_cie_2.copy().align(spectral_shape)
 
-    illuminant = colour.SDS_ILLUMINANTS['E'].copy().align(cmfs.shape)
+    illuminant = colour.SDS_ILLUMINANTS['D65'].copy().align(cmfs.shape)
     sd = colour.XYZ_to_sd(xyz, method='Jakob 2019', cmfs=cmfs, illuminant=illuminant)
     sd_to_xyz = colour.sd_to_XYZ(sd, cmfs=cmfs, illuminant=illuminant) / 100
 
@@ -478,7 +478,7 @@ def colour_xyz_to_sd(xyz: np.ndarray) -> colour.SpectralDistribution:
 
 # chromacity coordinates
 # chromacity_coordinates = np.array(COORDS['D65'])
-chromacity_coordinates = np.array(COORDS['E'])
+chromacity_coordinates = np.array(COORDS['D65'])
 whitepoint = xyy_to_xyz(xy_to_xyy(chromacity_coordinates))
 
 lambdas = np.linspace(LAMBDA_MIN, LAMBDA_MAX, LAMBDA_COUNT)
@@ -492,7 +492,7 @@ cmfs = np.column_stack(
 )
 
 # illuminant
-illuminant_data = ILLUMINANTS_CIE['E']
+illuminant_data = ILLUMINANTS_CIE['D65']
 illuminant_keys = np.array(list(illuminant_data.keys()))
 illuminant_values = np.array(list(illuminant_data.values()))
 illuminant = np.interp(lambdas, illuminant_keys, illuminant_values)
@@ -544,8 +544,8 @@ def main():
     # lab = xyz_to_lab(xyz, whitepoint=whitepoint)
     # logger.info(f'lab: {lab}')
 
-    # model = optimize(resolution)
-    # np.save('model.npy', model)
+    model = optimize(resolution)
+    np.save('model.npy', model)
 
     coefficients = fetch(xyz)
     logger.info(f'coefficients: {coefficients}')
