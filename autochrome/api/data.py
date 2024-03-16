@@ -26,7 +26,7 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/data/input2.jpg'
+    image_path: str = '/home/beat/Downloads/input_acescg.exr'
 
 
 @hashable_dataclass
@@ -37,7 +37,7 @@ class Grain:
     blur_sigma: float = 0.4
     seed_offset: int = 0
     bounds_min: QtCore.QPointF = deep_field(QtCore.QPointF(0, 0))
-    bounds_max: QtCore.QPointF = deep_field(QtCore.QPointF(1280, 720))
+    bounds_max: QtCore.QPointF = deep_field(QtCore.QPointF(2522, 1073))
 
 
 @hashable_dataclass
@@ -48,16 +48,16 @@ class Spectral:
 @hashable_dataclass
 class Output:
     write: bool = False
-    element: RenderElement = RenderElement.SPECTRAL
-    path: str = '/home/beat/dev/autochrome/output.jpg'
-    colorspace: str = 'sRGB - Display'
+    element: RenderElement = RenderElement.GRAIN
+    path: str = '/home/beat/dev/autochrome/output.exr'
+    colorspace: str = 'ACEScg'
     frame: int = 0
 
 
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(32, 32))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(2522, 1073))
 
     # system
     device: str = ''

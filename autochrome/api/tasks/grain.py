@@ -9,6 +9,8 @@ from PySide2 import QtCore
 from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
+from autochrome.api.tasks.spectral import normalize_image, un_normalize_image
+from autochrome.utils import ocio
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,7 @@ class GrainTask(OpenCL):
         samples: int,
         seed_offset: int,
         bounds: tuple[float, float, float, float],
+        mask: Image,
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -109,9 +112,13 @@ class GrainTask(OpenCL):
         image_array = np.dstack(
             (image_array, np.zeros(image_array.shape[:2], np.float32))
         )
+        processor = ocio.colorspace_processor(dst_name='ACEScc')
+        processor.applyRGBA(image_array)
+
         logger.debug(f'image_array_shape: {image_array.shape}')
         image = Image(self.context, image_array, args=str(image_file))
         logger.debug(image.shape)
+        min_val, max_val = normalize_image(image)
 
         lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
 
@@ -144,12 +151,45 @@ class GrainTask(OpenCL):
         w, h = resolution.width(), resolution.height()
         global_work_size = (w, h)
         local_work_size = None
-        cl.enqueue_nd_range_kernel(
-            self.queue, self.kernel, global_work_size, local_work_size
+
+        # cl.enqueue_nd_range_kernel(
+        #     self.queue, self.kernel, global_work_size, local_work_size
+        # )
+        # cl.enqueue_copy(
+        #     self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
+        # )
+
+        output = np.zeros(image.shape, np.float32)
+        for c in range(3):
+            image.array[:, :, 0] = image.array[:, :, c]
+            image.clear_image()
+            self.kernel.set_arg(0, image.image)
+            self.kernel.set_arg(7, np.int32(seed_offset + c))
+            logger.debug(f'offset: {seed_offset + c}')
+            cl.enqueue_nd_range_kernel(
+                self.queue, self.kernel, global_work_size, local_work_size
+            )
+            cl.enqueue_copy(
+                self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
+            )
+            output[:, :, c] = grain.array[:, :, 0]
+        grain = Image(
+            self.context,
+            output,
+            args=(
+                resolution,
+                image_file,
+                samples,
+                grain_sigma,
+                grain_mu,
+                blur_sigma,
+                seed_offset,
+            ),
         )
-        cl.enqueue_copy(
-            self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
-        )
+        un_normalize_image(grain, min_val, max_val)
+
+        processor = ocio.colorspace_processor(src_name='ACEScc')
+        processor.applyRGBA(grain.array)
 
         return grain
 
@@ -190,7 +230,7 @@ class GrainTask(OpenCL):
         )
         return image
 
-    def run(self, project: Project) -> Image:
+    def run(self, project: Project, mask: Image) -> Image:
         image_file = File(project.input.image_path)
         bounds = (
             project.grain.bounds_min.x(),
@@ -207,5 +247,6 @@ class GrainTask(OpenCL):
             samples=project.grain.samples,
             seed_offset=project.grain.seed_offset,
             bounds=bounds,
+            mask=mask,
         )
         return image

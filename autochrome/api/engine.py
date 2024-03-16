@@ -57,8 +57,8 @@ class Engine(QtCore.QObject):
         return image
 
     def grain(self, project: Project) -> Image:
-        spectral_buffer = self.spectral_task.run_buffer(project)
-        image = self.grain_task.run(project)
+        mask = self.spectral_task.run(project)
+        image = self.grain_task.run(project, mask)
         return image
 
     @timer

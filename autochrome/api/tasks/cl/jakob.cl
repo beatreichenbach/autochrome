@@ -132,3 +132,77 @@ __kernel void xyz_to_xyz(
     float4 rgba = fabs(xyz - xyz_reconstructed);
     write_imagef(output, (int2)(x, y), rgba);
 }
+
+__kernel void xyz_to_sd(
+    read_only image2d_t image,
+    __global float* sd,
+    __constant float* lambdas,
+    __constant float4* cmfs,
+    __constant float* illuminant,
+    __constant float* model,
+    __constant float* scale,
+    const uint resolution
+) {
+    sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 size = get_image_dim(image);
+
+    float4 xyz = read_imagef(image, sampler, (int2)(x, y));
+    float4 coefficients = fetch(xyz, model, scale, resolution);
+
+    // TODO: k is a shit name
+    float4 k = 0;
+    float4 xyz_reconstructed = 0; 
+    for (uint i = 0; i < LAMBDA_COUNT; ++i) {
+        float spectrum_value = eval_precise(coefficients, lambdas[i]);
+        float4 a = cmfs[i] * illuminant[i];
+        k += a;
+        xyz_reconstructed += a * spectrum_value;
+    }
+
+    xyz_reconstructed /= k;
+    xyz_reconstructed.w = 0;
+
+
+
+    float4 rgba = fabs(xyz - xyz_reconstructed);
+    // write_imagef(output, (int2)(x, y), rgba);
+}
+
+__kernel void xyz_to_mask(
+    read_only image2d_t image,
+    write_only image2d_t output,
+    __constant float* lambdas,
+    __constant float4* cmfs,
+    __constant float* illuminant,
+    __constant float* model,
+    __constant float* scale,
+    const uint model_resolution,
+    __constant float4* sensitivity,
+    __constant float* density
+) {
+    sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int2 uv = (int2) (x, y);
+
+    float4 xyz = read_imagef(image, sampler, uv);
+    float4 coefficients = fetch(xyz, model, scale, model_resolution);
+
+    float4 integral = 0;
+    float4 emulsion = 0; 
+    for (uint i = 0; i < LAMBDA_COUNT; ++i) {
+        float spectrum_value = eval_precise(coefficients, lambdas[i]);
+        integral += sensitivity[i] * density[i];
+        emulsion += sensitivity[i] * density[i] * spectrum_value;
+    }
+    integral.w = 1;
+
+    emulsion /= integral;
+
+    // normalize
+    float4 mask = emulsion / (emulsion.x + emulsion.y + emulsion.z);
+
+    write_imagef(output, (int2)(x, y), mask);
+}
