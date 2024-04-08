@@ -170,6 +170,8 @@ __kernel void xyz_to_sd(
     // write_imagef(output, (int2)(x, y), rgba);
 }
 
+#define EPSILON 0.00001f
+
 __kernel void xyz_to_mask(
     read_only image2d_t image,
     write_only image2d_t output,
@@ -188,6 +190,12 @@ __kernel void xyz_to_mask(
     int2 uv = (int2) (x, y);
 
     float4 xyz = read_imagef(image, sampler, uv);
+
+    if (xyz.x < EPSILON || xyz.y < EPSILON || xyz.z < EPSILON) {
+        write_imagef(output, (int2)(x, y), (float4) 0);
+        return;
+    }
+
     float4 coefficients = fetch(xyz, model, scale, model_resolution);
 
     float4 integral = 0;

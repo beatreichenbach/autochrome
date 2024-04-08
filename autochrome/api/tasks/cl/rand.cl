@@ -14,10 +14,7 @@
 * @return output, modified seed
 */
 
-uint wang_hash(
-	uint seed
-    )
-{
+uint wang_hash(uint seed) {
     seed = (seed ^ 61u) ^ (seed >> 16u);
     seed *= 9u;
     seed = seed ^ (seed >> 4u);
@@ -27,9 +24,8 @@ uint wang_hash(
 }
 
 
-uint pcg_hash(uint input)
-{
-    uint state = input * 747796405u + 2891336453u;
+uint pcg_hash(uint seed) {
+    uint state = seed * 747796405u + 2891336453u;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     return (word >> 22u) ^ word;
 }
@@ -41,15 +37,10 @@ uint pcg_hash(uint input)
 * @param (x,y) : constant offset to change seeds for cells
 * @return seed for this cell
 */
-uint cell_seed(
-    const uint x,
-    const uint y,
-    const uint offset
-    )
-{
+uint cell_seed(const uint x, const uint y, const uint offset) {
     const uint period = 65536u; // 2^16 = 65536
     uint seed = (( y % period) * period + (x % period)) + offset;
-    if (seed == 0u) seed = 1u;
+    // if (seed == 0u) seed = 1u;
     return seed;
 }
 
@@ -60,8 +51,7 @@ uint cell_seed(
 * @param : seed for initialisation
 * @return : void
 */
-void init_rand(uint  *state, const uint seed)
-{
+void init_rand(uint  *state, const uint seed) {
     uint local_seed = seed;
     *state = pcg_hash(local_seed);
 }
@@ -73,8 +63,7 @@ void init_rand(uint  *state, const uint seed)
 * @return : random integer from 0 to max_unsigned_int (4294967295)
 */
 
-uint rand(uint *state)
-{
+uint rand(uint *state) {
     // linear congruential generator: procudes correlated output. Similar patterns are visible
     // p.state = 1664525u * p.state + 1013904223u;
     // Xorshift algorithm from George Marsaglia's paper
@@ -90,8 +79,7 @@ uint rand(uint *state)
 * @param : pointer to the state of the pseudo-random number generator
 * @return : random floating point number in the interval [0;1]
 */
-float rand_uniform(uint *state)
-{
+float rand_uniform(uint *state) {
     return (float) rand(state) / (float) 4294967295u;
 }
 
@@ -101,8 +89,7 @@ float rand_uniform(uint *state)
 * @param : pointer to the state of the pseudo-random number generator
 * @return : random number following a standard normal distribution
 */
-float rand_gaussian(uint  *state)
-{
+float rand_gaussian(uint  *state) {
     // Box-Muller method for generating standard Gaussian variate
     float u = rand_uniform(state);
     float v = rand_uniform(state);
@@ -115,8 +102,7 @@ float rand_gaussian(uint  *state)
 * @param : pointer to the state of the pseudo-random number generator
 * @return : pair of random numbers following a standard normal distribution
 */
-float2 rand_gaussian_float2(uint  *state)
-{
+float2 rand_gaussian_float2(uint  *state) {
     // Box-Muller method for generating standard Gaussian variate
     float u = rand_uniform(state);
     float v = rand_uniform(state);
@@ -141,7 +127,7 @@ float2 rand_gaussian_float2(uint  *state)
 uint rand_poisson(uint *state, float lambda, float exp_lambda)
 {
 	// Inverse transform sampling
-	float u=rand_uniform(state);
+	float u = rand_uniform(state);
 	uint x = 0u;
 	//float prod = exp(-lambda); // this should be passed as an argument if used extensively with the same value lambda
 	float prod = exp_lambda;

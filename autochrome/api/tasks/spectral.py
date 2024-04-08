@@ -31,8 +31,8 @@ def smoothstep(x: float) -> float:
 
 
 def normalize_image(image: Image) -> tuple:
-    min_val = np.min(image.array)
-    max_val = np.max(image.array)
+    min_val = np.min(image.array[:, :, :3])
+    max_val = np.max(image.array[:, :, :3])
     image._array = (image.array - min_val) / (max_val - min_val)
     return min_val, max_val
 
@@ -256,140 +256,22 @@ class SpectralTask(OpenCL):
             self.queue, spectral.array, spectral.image, origin=(0, 0), region=(w, h)
         )
 
-        un_normalize_image(image, min_val, max_val)
-        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-        processor.applyRGBA(image.array)
+        # un_normalize_image(image, min_val, max_val)
+        # processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        # processor.applyRGBA(image.array)
 
-        image._array[:, :] = (
-            image._array[:, :] * spectral.array[:, :, 0, np.newaxis]
-            + image._array[:, :] * spectral.array[:, :, 1, np.newaxis]
-            + image._array[:, :] * spectral.array[:, :, 2, np.newaxis]
-        )
+        # image._array[:, :] = (
+        #     image._array[:, :] * spectral.array[:, :, 0, np.newaxis]
+        #     + image._array[:, :] * spectral.array[:, :, 1, np.newaxis]
+        #     + image._array[:, :] * spectral.array[:, :, 2, np.newaxis]
+        # )
 
         # un_normalize_image(spectral, min_val, max_val)
         # processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
         # processor.applyRGBA(spectral.array)
+        # spectral.array[:, :, :] = 0.3
 
         return spectral
-
-    @timer
-    @lru_cache(1)
-    def spectral_buffer(
-        self,
-        image_file: File,
-        resolution: QtCore.QSize,
-    ) -> Buffer:
-        if self.rebuild:
-            self.build()
-        image = self.load_file(image_file, resolution)
-        processor = ocio.colorspace_processor(
-            src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
-        )
-        processor.applyRGBA(image.array)
-
-        model_resolution = 16
-        scale = self.update_scale(model_resolution)
-        lambdas = self.update_lambdas(LAMBDA_MIN, LAMBDA_MAX, LAMBDA_COUNT)
-        cmfs = self.update_cmfs(lambdas)
-        illuminant = self.update_illuminant(lambdas)
-        model = self.update_model()
-        spectral_distribution = self.update_spectral_distribution(
-            resolution, LAMBDA_COUNT
-        )
-        spectral_distribution.args = (image_file, resolution)
-
-        # run program
-        self.kernel.set_arg(0, image.image)
-        self.kernel.set_arg(1, spectral_distribution.buffer)
-        self.kernel.set_arg(2, lambdas.buffer)
-        self.kernel.set_arg(3, cmfs.buffer)
-        self.kernel.set_arg(4, illuminant.buffer)
-        self.kernel.set_arg(5, model.buffer)
-        self.kernel.set_arg(6, scale.buffer)
-        self.kernel.set_arg(7, np.int32(model_resolution))
-
-        w, h = resolution.width(), resolution.height()
-        global_work_size = (w, h)
-        local_work_size = None
-        cl.enqueue_nd_range_kernel(
-            self.queue, self.kernel, global_work_size, local_work_size
-        )
-        cl.enqueue_copy(
-            self.queue, spectral_distribution.array, spectral_distribution.buffer
-        )
-        spectral_distribution._array = np.reshape(
-            spectral_distribution.array,
-            (resolution.height(), resolution.width(), LAMBDA_COUNT),
-        )
-
-        np.save('spectral_distribution.npy', spectral_distribution.array)
-
-        return image
-
-    #
-    # @timer
-    # @lru_cache(1)
-    # def spectral_image(
-    #     self,
-    #     image_file: File,
-    #     resolution: QtCore.QSize,
-    # ) -> Image:
-    #     if self.rebuild:
-    #         self.build()
-    #
-    #
-    #     image = self.load_file(image_file, resolution)
-    #     processor = ocio.colorspace_processor(
-    #         src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
-    #     )
-    #     processor.applyRGBA(image.array)
-    #
-    #     min_val, max_val = normalize_image(image)
-    #
-    #     model_resolution = 16
-    #     scale = self.update_scale(model_resolution)
-    #     lambdas = self.update_lambdas(LAMBDA_MIN, LAMBDA_MAX, LAMBDA_COUNT)
-    #     cmfs = self.update_cmfs(lambdas)
-    #     illuminant = self.update_illuminant(lambdas)
-    #     model = self.update_model()
-    #
-    #     spectral_distribution = self.spectral_buffer(image_file, resolution)
-    #
-    #     # create output buffer
-    #     spectral = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
-    #     spectral.args = (resolution, model_resolution, image_file)
-    #     # image.clear_image()
-    #
-    #     # run program
-    #     self.kernel.set_arg(0, spectral_distribution.buffer)
-    #     self.kernel.set_arg(1, spectral.image)
-    #     self.kernel.set_arg(2, lambdas.buffer)
-    #     self.kernel.set_arg(3, cmfs.buffer)
-    #     self.kernel.set_arg(4, illuminant.buffer)
-    #     self.kernel.set_arg(5, model.buffer)
-    #     self.kernel.set_arg(6, scale.buffer)
-    #     self.kernel.set_arg(7, np.int32(model_resolution))
-    #
-    #     w, h = resolution.width(), resolution.height()
-    #     global_work_size = (w, h)
-    #     local_work_size = None
-    #     cl.enqueue_nd_range_kernel(
-    #         self.queue, self.kernel, global_work_size, local_work_size
-    #     )
-    #     cl.enqueue_copy(
-    #         self.queue, spectral.array, spectral.image, origin=(0, 0), region=(w, h)
-    #     )
-    #
-    #     un_normalize_image(spectral, min_val, max_val)
-    #
-    #     logger.debug(spectral.array[16, 16])
-    #
-    #     processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-    #     processor.applyRGBA(spectral.array)
-    #
-    #     logger.debug(spectral.array[16, 16])
-    #
-    #     return spectral
 
     def run(self, project: Project) -> Image:
         image_file = File(project.input.image_path)

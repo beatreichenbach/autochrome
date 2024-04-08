@@ -57,53 +57,79 @@ class ProjectEditor(ParameterEditor):
         box = self.add_group('spectral')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
-        input_group = box.form
+        spectral_group = box.form
 
         parm = IntParameter(name='wavelength')
         parm.set_line_min(380)
         parm.set_line_max(780)
         parm.set_slider_min(380)
         parm.set_slider_max(780)
-        input_group.add_parameter(parm)
+        spectral_group.add_parameter(parm)
 
         # grain
         box = self.add_group('grain')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
-        input_group = box.form
+        grain_group = box.form
 
         parm = IntParameter(name='samples')
         parm.set_line_min(0)
         parm.set_slider_visible(False)
-        input_group.add_parameter(parm)
+        grain_group.add_parameter(parm)
 
         parm = IntParameter(name='seed_offset')
         parm.set_slider_visible(False)
-        input_group.add_parameter(parm)
+        grain_group.add_parameter(parm)
 
         parm = FloatParameter(name='grain_mu')
-        parm.set_line_min(0)
+        parm.set_line_min(0.0001)
         parm.set_slider_min(0)
         parm.set_slider_max(1)
-        input_group.add_parameter(parm)
+        grain_group.add_parameter(parm)
 
         parm = FloatParameter(name='grain_sigma')
         parm.set_line_min(0)
         parm.set_slider_min(0)
         parm.set_slider_max(1)
-        input_group.add_parameter(parm)
+        grain_group.add_parameter(parm)
 
         parm = FloatParameter(name='blur_sigma')
         parm.set_line_min(0)
         parm.set_slider_min(0)
         parm.set_slider_max(1)
-        input_group.add_parameter(parm)
+        grain_group.add_parameter(parm)
 
-        parm = PointFParameter(name='bounds_min')
-        input_group.add_parameter(parm)
+        parm = PointParameter(name='bounds_min')
+        grain_group.add_parameter(parm)
 
-        parm = PointFParameter(name='bounds_max')
-        input_group.add_parameter(parm)
+        parm = PointParameter(name='bounds_max')
+        grain_group.add_parameter(parm)
+
+        # ggx
+
+        box = self.add_group('ggx')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        ggx_group = box.form
+
+        parm = FloatParameter(name='roughness')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        ggx_group.add_parameter(parm)
+
+        parm = FloatParameter(name='height')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        ggx_group.add_parameter(parm)
+
+        parm = PointFParameter(name='light_position')
+        ggx_group.add_parameter(parm)
+
+        parm = SizeParameter(name='resolution')
+        parm.set_slider_visible(False)
+        parm.set_keep_ratio(False)
+        ggx_group.add_parameter(parm)
 
         # render
         box = self.add_group('render')

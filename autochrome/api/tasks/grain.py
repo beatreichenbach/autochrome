@@ -104,26 +104,42 @@ class GrainTask(OpenCL):
         seed_offset: int,
         bounds: tuple[float, float, float, float],
         mask: Image,
+        halation: Image,
     ) -> Image:
         if self.rebuild:
             self.build()
 
-        image_array = self.load_file(image_file, resolution)
-        image_array = np.dstack(
-            (image_array, np.zeros(image_array.shape[:2], np.float32))
-        )
-        processor = ocio.colorspace_processor(dst_name='ACEScc')
-        processor.applyRGBA(image_array)
+        bounds = (0, 0, resolution.width(), resolution.height())
 
-        logger.debug(f'image_array_shape: {image_array.shape}')
-        image = Image(self.context, image_array, args=str(image_file))
-        logger.debug(image.shape)
-        min_val, max_val = normalize_image(image)
+        # image_array = self.load_file(image_file, resolution)
+        # image_array = np.dstack(
+        #     (image_array, np.zeros(image_array.shape[:2], np.float32))
+        # )
+        # processor = ocio.colorspace_processor(
+        #     src_name='sRGB - Display', dst_name='ACEScc'
+        # )
+        # processor.applyRGBA(image_array)
+
+        # processor = ocio.colorspace_processor(dst_name='ACEScc')
+        # processor.applyRGBA(halation.array)
+
+        # min_val, max_val = normalize_image(halation)
+        # logger.debug((min_val, max_val))
+        halation.array[:, :, 3] = 0
+
+        # logger.debug(f'image_array_shape: {image_array.shape}')
+        # image = Image(self.context, image_array, args=str(image_file))
+        # logger.debug(image.shape)
+        # min_val, max_val = normalize_image(image)
 
         lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
 
         # create output buffer
-        grain = self.update_image(resolution, flags=cl.mem_flags.WRITE_ONLY)
+        grain = self.update_image(
+            resolution,
+            flags=cl.mem_flags.WRITE_ONLY,
+            channel_order=cl.channel_order.LUMINANCE,
+        )
         grain.args = (
             resolution,
             grain_mu,
@@ -138,7 +154,7 @@ class GrainTask(OpenCL):
         # image.clear_image()
 
         # run program
-        self.kernel.set_arg(0, image.image)
+        # self.kernel.set_arg(0, image.image)
         self.kernel.set_arg(1, grain.image)
         self.kernel.set_arg(2, lut.buffer)
         self.kernel.set_arg(3, np.int32(samples))
@@ -158,21 +174,34 @@ class GrainTask(OpenCL):
         # cl.enqueue_copy(
         #     self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
         # )
+        # output = grain.array
 
-        output = np.zeros(image.shape, np.float32)
-        for c in range(3):
-            image.array[:, :, 0] = image.array[:, :, c]
-            image.clear_image()
+        output = np.zeros((h, w, 4), np.float32)
+
+        mean = np.mean(halation.array, axis=2)
+        ratio = halation.array / (mean[:, :, np.newaxis] * 3)
+
+        for c in range(1, 2):
+            # image_array = halation.array[:, :, c]
+            # image_array = np.mean(halation.array, axis=2) * mask.array[:, :, c]
+            image_array = mean * mask.array[:, :, c]
+            image = Image(self.context, array=image_array)
+
             self.kernel.set_arg(0, image.image)
-            self.kernel.set_arg(7, np.int32(seed_offset + c))
-            logger.debug(f'offset: {seed_offset + c}')
+            # 1431655765 is roughly a third of the max range for the random noise.
+            self.kernel.set_arg(7, np.int32(seed_offset + c * 1431655765))
+
             cl.enqueue_nd_range_kernel(
                 self.queue, self.kernel, global_work_size, local_work_size
             )
             cl.enqueue_copy(
                 self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
             )
-            output[:, :, c] = grain.array[:, :, 0]
+
+            # output += grain.array[:, :, np.newaxis] * ratio
+
+            output += grain.array[:, :, np.newaxis] * ratio
+
         grain = Image(
             self.context,
             output,
@@ -186,51 +215,17 @@ class GrainTask(OpenCL):
                 seed_offset,
             ),
         )
-        un_normalize_image(grain, min_val, max_val)
 
-        processor = ocio.colorspace_processor(src_name='ACEScc')
-        processor.applyRGBA(grain.array)
+        # grain._array = np.mean(halation.array, axis=2)[:, :, np.newaxis] / mask.array
+
+        # un_normalize_image(grain, min_val, max_val)
+
+        # processor = ocio.colorspace_processor(src_name='ACEScc')
+        # processor.applyRGBA(grain.array)
 
         return grain
 
-    def render_spectral(
-        self,
-        spectral: Buffer,
-        grain_mu: float,
-        grain_sigma: float,
-        blur_sigma: float,
-        samples: int,
-        seed_offset: int,
-    ) -> Image:
-        height, width, wavelength_count = spectral.shape
-
-        lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
-
-        global_work_size = (width, height)
-        local_work_size = None
-        cl.enqueue_nd_range_kernel(
-            self.queue, self.kernel, global_work_size, local_work_size
-        )
-        cl.enqueue_copy(
-            self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
-        )
-
-        return image
-
-    def run_spectral(self, project: Project, spectral: Buffer) -> Image:
-        image = self.render_grain(
-            image_file,
-            resolution=project.render.resolution,
-            grain_mu=project.grain.grain_mu,
-            grain_sigma=project.grain.grain_sigma,
-            blur_sigma=project.grain.blur_sigma,
-            samples=project.grain.samples,
-            seed_offset=project.grain.seed_offset,
-            bounds=bounds,
-        )
-        return image
-
-    def run(self, project: Project, mask: Image) -> Image:
+    def run(self, project: Project, mask: Image, halation: Image) -> Image:
         image_file = File(project.input.image_path)
         bounds = (
             project.grain.bounds_min.x(),
@@ -248,5 +243,6 @@ class GrainTask(OpenCL):
             seed_offset=project.grain.seed_offset,
             bounds=bounds,
             mask=mask,
+            halation=halation,
         )
         return image

@@ -13,7 +13,9 @@ from pyopencl import tools
 
 from autochrome.api.data import Project, RenderElement, RenderImage, EngineError
 from autochrome.api.tasks import opencl
+from autochrome.api.tasks.ggx import GGXTask
 from autochrome.api.tasks.grain import GrainTask
+from autochrome.api.tasks.halation import HalationTask
 from autochrome.api.tasks.opencl import Image
 from autochrome.api.tasks.spectral import SpectralTask
 from autochrome.storage import Storage
@@ -44,10 +46,14 @@ class Engine(QtCore.QObject):
         self.renderers: dict[RenderElement, Callable] = OrderedDict()
         self.renderers[RenderElement.SPECTRAL] = self.spectral
         self.renderers[RenderElement.GRAIN] = self.grain
+        self.renderers[RenderElement.GGX] = self.ggx
+        self.renderers[RenderElement.HALATION] = self.halation
 
     def _init_tasks(self) -> None:
         self.grain_task = GrainTask(self.queue)
         self.spectral_task = SpectralTask(self.queue)
+        self.ggx_task = GGXTask(self.queue)
+        self.halation_task = HalationTask(self.queue)
 
     def elements(self) -> list[RenderElement]:
         return self._elements
@@ -57,8 +63,19 @@ class Engine(QtCore.QObject):
         return image
 
     def grain(self, project: Project) -> Image:
+        spec = self.ggx_task.run(project)
+        halation = self.halation_task.run(project, spec)
         mask = self.spectral_task.run(project)
-        image = self.grain_task.run(project, mask)
+        image = self.grain_task.run(project, mask, halation)
+        return image
+
+    def halation(self, project: Project) -> Image:
+        spec = self.ggx_task.run(project)
+        image = self.halation_task.run(project, spec)
+        return image
+
+    def ggx(self, project: Project) -> Image:
+        image = self.ggx_task.run(project)
         return image
 
     @timer
