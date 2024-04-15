@@ -174,15 +174,16 @@ __kernel void xyz_to_sd(
 
 __kernel void xyz_to_mask(
     read_only image2d_t image,
-    write_only image2d_t output,
+    write_only image2d_t output_r,
+    write_only image2d_t output_g,
+    write_only image2d_t output_b,
     __constant float* lambdas,
     __constant float4* cmfs,
     __constant float* illuminant,
     __constant float* model,
     __constant float* scale,
     const uint model_resolution,
-    __constant float4* sensitivity,
-    __constant float* density
+    __constant float4* sensitivity
 ) {
     sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
     int x = get_global_id(0);
@@ -192,25 +193,49 @@ __kernel void xyz_to_mask(
     float4 xyz = read_imagef(image, sampler, uv);
 
     if (xyz.x < EPSILON || xyz.y < EPSILON || xyz.z < EPSILON) {
-        write_imagef(output, (int2)(x, y), (float4) 0);
+        write_imagef(output_r, (int2)(x, y), (float4) 0);
+        write_imagef(output_g, (int2)(x, y), (float4) 0);
+        write_imagef(output_b, (int2)(x, y), (float4) 0);
         return;
     }
 
     float4 coefficients = fetch(xyz, model, scale, model_resolution);
 
     float4 integral = 0;
-    float4 emulsion = 0; 
+
+    float4 red_layer = 0;
+    float4 green_layer = 0;
+    float4 blue_layer = 0;
+
+    // float4 emulsion = 0; 
     for (uint i = 0; i < LAMBDA_COUNT; ++i) {
-        float spectrum_value = eval_precise(coefficients, lambdas[i]);
-        integral += sensitivity[i] * density[i];
-        emulsion += sensitivity[i] * density[i] * spectrum_value;
+        float lambda_rel = (float) i / (LAMBDA_COUNT - 1);
+        float spectrum_value = eval_precise(coefficients, lambda_rel);
+
+
+        float4 ratio = sensitivity[i] / (sensitivity[i].x + sensitivity[i].y + sensitivity[i].z);
+
+        integral += cmfs[i] * illuminant[i];
+        // emulsion += cmfs[i] * illuminant[i] * spectrum_value;
+
+        red_layer += cmfs[i] * illuminant[i] * spectrum_value * ratio.x;
+        green_layer += cmfs[i] * illuminant[i] * spectrum_value * ratio.y;
+        blue_layer += cmfs[i] * illuminant[i] * spectrum_value * ratio.z;
+
     }
     integral.w = 1;
 
-    emulsion /= integral;
+    // emulsion /= integral;
 
-    // normalize
-    float4 mask = emulsion / (emulsion.x + emulsion.y + emulsion.z);
 
-    write_imagef(output, (int2)(x, y), mask);
+    red_layer /= integral;
+    blue_layer /= integral;
+    green_layer /= integral;
+
+    // float4 emulsion = red_layer + green_layer + blue_layer;
+    // emulsion = fabs(xyz - emulsion);
+    
+    write_imagef(output_r, (int2)(x, y), red_layer);
+    write_imagef(output_g, (int2)(x, y), green_layer);
+    write_imagef(output_b, (int2)(x, y), blue_layer);
 }

@@ -8,6 +8,7 @@ from PySide2 import QtCore
 
 from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
+from autochrome.api.tasks.halation import HalationTask
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
 from autochrome.api.tasks.spectral import normalize_image, un_normalize_image
 from autochrome.utils import ocio
@@ -46,6 +47,7 @@ def lambda_lut(mu: float, sigma: float, count: int = 256) -> np.ndarray:
 class GrainTask(OpenCL):
     def __init__(self, queue) -> None:
         super().__init__(queue)
+        self.halation_task = HalationTask(self.queue)
         self.kernels = {}
         self.build()
 
@@ -103,8 +105,8 @@ class GrainTask(OpenCL):
         samples: int,
         seed_offset: int,
         bounds: tuple[float, float, float, float],
-        mask: Image,
-        halation: Image,
+        spectrals: tuple[Image, ...],
+        spec: Image,
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -125,7 +127,7 @@ class GrainTask(OpenCL):
 
         # min_val, max_val = normalize_image(halation)
         # logger.debug((min_val, max_val))
-        halation.array[:, :, 3] = 0
+        # halation.array[:, :, 3] = 0
 
         # logger.debug(f'image_array_shape: {image_array.shape}')
         # image = Image(self.context, image_array, args=str(image_file))
@@ -176,18 +178,22 @@ class GrainTask(OpenCL):
         # )
         # output = grain.array
 
-        output = np.zeros((h, w, 4), np.float32)
+        output_array = np.zeros((h, w, 4), np.float32)
 
-        mean = np.mean(halation.array, axis=2)
-        ratio = halation.array / (mean[:, :, np.newaxis] * 3)
-
-        for c in range(1, 2):
-            # image_array = halation.array[:, :, c]
-            # image_array = np.mean(halation.array, axis=2) * mask.array[:, :, c]
-            image_array = mean * mask.array[:, :, c]
-            image = Image(self.context, array=image_array)
+        for c, spectral in enumerate(spectrals):
+            # output += spectral.array
+            # continue
+            # if c > 1:
+            #     continue
+            if c == 0:
+                halation = self.halation_task.render(spectral, spec)
+            else:
+                halation = spectral
+            mean = np.mean(halation.array, axis=2)
+            image = Image(self.context, array=mean)
 
             self.kernel.set_arg(0, image.image)
+
             # 1431655765 is roughly a third of the max range for the random noise.
             self.kernel.set_arg(7, np.int32(seed_offset + c * 1431655765))
 
@@ -198,13 +204,15 @@ class GrainTask(OpenCL):
                 self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
             )
 
-            # output += grain.array[:, :, np.newaxis] * ratio
+            output_array += halation.array * (grain.array / mean)[:, :, np.newaxis]
+            # output += mean[:, :, np.newaxis]
 
-            output += grain.array[:, :, np.newaxis] * ratio
+        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        processor.applyRGBA(output_array)
 
         grain = Image(
             self.context,
-            output,
+            output_array,
             args=(
                 resolution,
                 image_file,
@@ -213,19 +221,16 @@ class GrainTask(OpenCL):
                 grain_mu,
                 blur_sigma,
                 seed_offset,
+                spectrals,
+                spec,
             ),
         )
 
-        # grain._array = np.mean(halation.array, axis=2)[:, :, np.newaxis] / mask.array
-
         # un_normalize_image(grain, min_val, max_val)
-
-        # processor = ocio.colorspace_processor(src_name='ACEScc')
-        # processor.applyRGBA(grain.array)
 
         return grain
 
-    def run(self, project: Project, mask: Image, halation: Image) -> Image:
+    def run(self, project: Project, spectrals: tuple[Image, ...], spec: Image) -> Image:
         image_file = File(project.input.image_path)
         bounds = (
             project.grain.bounds_min.x(),
@@ -242,7 +247,7 @@ class GrainTask(OpenCL):
             samples=project.grain.samples,
             seed_offset=project.grain.seed_offset,
             bounds=bounds,
-            mask=mask,
-            halation=halation,
+            spectrals=spectrals,
+            spec=spec,
         )
         return image

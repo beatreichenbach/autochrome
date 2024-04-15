@@ -59,20 +59,26 @@ class Engine(QtCore.QObject):
         return self._elements
 
     def spectral(self, project: Project) -> Image:
-        image = self.spectral_task.run(project)
+        images = self.spectral_task.run(project)
+
+        image = images[2]
+
+        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        processor.applyRGBA(image.array)
+
         return image
 
     def grain(self, project: Project) -> Image:
         spec = self.ggx_task.run(project)
-        halation = self.halation_task.run(project, spec)
-        mask = self.spectral_task.run(project)
-        image = self.grain_task.run(project, mask, halation)
+        # halation = self.halation_task.run(project, spec)
+        spectrals = self.spectral_task.run(project)
+        image = self.grain_task.run(project, spectrals, spec)
         return image
 
     def halation(self, project: Project) -> Image:
         spec = self.ggx_task.run(project)
-        image = self.halation_task.run(project, spec)
-        return image
+        # image = self.halation_task.run(project, spec)
+        return spec
 
     def ggx(self, project: Project) -> Image:
         image = self.ggx_task.run(project)

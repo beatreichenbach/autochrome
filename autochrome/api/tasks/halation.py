@@ -55,43 +55,28 @@ class HalationTask(OpenCL):
 
     def render(
         self,
-        image_file: File,
-        resolution: QtCore.QSize,
+        image: Image,
         spec: Image,
     ) -> Image:
         if self.rebuild:
             self.build()
 
-        image_array = self.load_file(image_file, resolution)
-        image_array = np.dstack(
-            (image_array, np.zeros(image_array.shape[:2], np.float32))
-        )
-        processor = ocio.colorspace_processor(src_name='sRGB - Display')
-        processor.applyRGBA(image_array)
-
-        black = 0.25
-        white = 0.4
-        mask = np.clip((image_array[:, :, 0] - black) / (white - black), 0, 1)
-        logger.debug(np.min(image_array[:, :, 0]))
-        logger.debug(np.max(image_array[:, :, 0]))
-
-        image = Image(
-            self.context, image_array * mask[:, :, np.newaxis], args=str(image_file)
-        )
+        resolution = QtCore.QSize(image.array.shape[1], image.array.shape[0])
 
         # create temp buffer
         temp = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
 
         # create output buffer
         halation = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
-        halation.args = (resolution, image_file, spec)
+        halation.args = (resolution, image, spec)
 
         mask_size = int(spec.array.shape[0] / 2)
         mask_array = np.ascontiguousarray(spec.array[mask_size, :, 0])
         mask_array /= np.sum(mask_array)
 
         mask = Buffer(self.context, array=mask_array, args=(spec,))
-        logger.debug(mask_array)
+        # logger.debug(mask_array)
+        image.clear_image()
 
         # run program
         self.kernel.set_arg(0, image.image)
@@ -125,7 +110,8 @@ class HalationTask(OpenCL):
             self.queue, halation.array, halation.image, origin=(0, 0), region=(w, h)
         )
 
-        # image_array[:, :, 0] += halation.array[:, :, 0]
+        output_array = image.array.copy()
+        output_array += halation.array
 
         # max_density = 3
         # S = 10
@@ -134,14 +120,10 @@ class HalationTask(OpenCL):
         # density = np.log10(1 + S * np.power(image_array, a)) + C
         # image_array = density / max_density
 
-        output = Image(self.context, array=image_array, args=spec)
+        output = Image(self.context, array=output_array, args=(image, spec))
 
         return output
 
-    def run(self, project: Project, spec: Image) -> Image:
-
-        image_file = File(project.input.image_path)
-        image = self.render(
-            image_file=image_file, resolution=project.render.resolution, spec=spec
-        )
+    def run(self, project: Project, spec: Image, image: Image) -> Image:
+        image = self.render(image=image, spec=spec)
         return image

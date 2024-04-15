@@ -33,7 +33,9 @@ def smoothstep(x: float) -> float:
 def normalize_image(image: Image) -> tuple:
     min_val = np.min(image.array[:, :, :3])
     max_val = np.max(image.array[:, :, :3])
-    image._array = (image.array - min_val) / (max_val - min_val)
+    lift = 0.01
+    lift = 0
+    image._array = (image.array - min_val + lift) / (max_val + lift - min_val)
     return min_val, max_val
 
 
@@ -199,24 +201,38 @@ class SpectralTask(OpenCL):
         buffer = Buffer(self.context, array=density, args=lambdas)
         return buffer
 
+    @lru_cache(1)
+    def update_test_pattern(self, resolution: int) -> Buffer:
+        space = np.linspace(0, 1, resolution)
+        pattern_3d = np.stack(np.meshgrid(space, space, space), axis=3)
+
+        # size = int(np.ceil(np.sqrt(resolution**3)))
+        shape = (resolution, resolution**2, 3)
+        pattern_2d = pattern_3d.flatten()
+        pattern_2d.resize(shape, refcheck=False)
+
+        pattern = Buffer(context=self.context, array=pattern_2d, args=resolution)
+        return pattern
+
     @timer
     @lru_cache(1)
     def spectral_image(
         self,
         image_file: File,
         resolution: QtCore.QSize,
-    ) -> Image:
+    ) -> tuple[Image, ...]:
         if self.rebuild:
             self.build()
         image = self.load_file(image_file, resolution)
-        # image._array[:, :, :] = np.array([0.18069152, 0.16347412, 0.03151255, 0])
+        image.clear_image()
+
         processor = ocio.colorspace_processor(
             src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
         )
         processor.applyRGBA(image.array)
 
         min_val, max_val = normalize_image(image)
-        logger.debug(f'image_values: {image.array[0, 0]}')
+        # logger.debug(f'image_values: {image.array[0, 0]}')
 
         model_resolution = 16
         scale = self.update_scale(model_resolution)
@@ -229,22 +245,27 @@ class SpectralTask(OpenCL):
         spectral_density = self.update_spectral_density(lambdas)
 
         # create output buffer
-        spectral = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
-        spectral.args = (resolution, model_resolution, image_file)
+        spectral_r = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
+        spectral_r.args = (resolution, model_resolution, image_file)
+        spectral_g = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
+        spectral_g.args = (resolution, model_resolution, image_file)
+        spectral_b = self.update_image(resolution)  # , flags=cl.mem_flags.READ_WRITE
+        spectral_b.args = (resolution, model_resolution, image_file)
         # image.clear_image()
 
         # run program
         kernel = self.kernels['xyz_to_mask']
         kernel.set_arg(0, image.image)
-        kernel.set_arg(1, spectral.image)
-        kernel.set_arg(2, lambdas.buffer)
-        kernel.set_arg(3, cmfs.buffer)
-        kernel.set_arg(4, illuminant.buffer)
-        kernel.set_arg(5, model.buffer)
-        kernel.set_arg(6, scale.buffer)
-        kernel.set_arg(7, np.int32(model_resolution))
-        kernel.set_arg(8, spectral_sensitivity.buffer)
-        kernel.set_arg(9, spectral_density.buffer)
+        kernel.set_arg(1, spectral_r.image)
+        kernel.set_arg(2, spectral_g.image)
+        kernel.set_arg(3, spectral_b.image)
+        kernel.set_arg(4, lambdas.buffer)
+        kernel.set_arg(5, cmfs.buffer)
+        kernel.set_arg(6, illuminant.buffer)
+        kernel.set_arg(7, model.buffer)
+        kernel.set_arg(8, scale.buffer)
+        kernel.set_arg(9, np.int32(model_resolution))
+        kernel.set_arg(10, spectral_sensitivity.buffer)
 
         w, h = resolution.width(), resolution.height()
         global_work_size = (w, h)
@@ -253,7 +274,13 @@ class SpectralTask(OpenCL):
             self.queue, kernel, global_work_size, local_work_size
         )
         cl.enqueue_copy(
-            self.queue, spectral.array, spectral.image, origin=(0, 0), region=(w, h)
+            self.queue, spectral_r.array, spectral_r.image, origin=(0, 0), region=(w, h)
+        )
+        cl.enqueue_copy(
+            self.queue, spectral_g.array, spectral_g.image, origin=(0, 0), region=(w, h)
+        )
+        cl.enqueue_copy(
+            self.queue, spectral_b.array, spectral_b.image, origin=(0, 0), region=(w, h)
         )
 
         # un_normalize_image(image, min_val, max_val)
@@ -271,9 +298,9 @@ class SpectralTask(OpenCL):
         # processor.applyRGBA(spectral.array)
         # spectral.array[:, :, :] = 0.3
 
-        return spectral
+        return spectral_r, spectral_g, spectral_b
 
-    def run(self, project: Project) -> Image:
+    def run(self, project: Project) -> tuple[Image, ...]:
         image_file = File(project.input.image_path)
         resolution = project.render.resolution
         image = self.spectral_image(image_file, resolution)
