@@ -57,6 +57,8 @@ class HalationTask(OpenCL):
         self,
         image: Image,
         spec: Image,
+        mask_range: tuple[float, float],
+        amount: float,
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -64,11 +66,10 @@ class HalationTask(OpenCL):
         resolution = QtCore.QSize(image.array.shape[1], image.array.shape[0])
 
         # create temp buffer
-        temp = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
+        temp1 = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
 
         # create output buffer
-        halation = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
-        halation.args = (resolution, image, spec)
+        temp2 = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
 
         mask_size = int(spec.array.shape[0] / 2)
         mask_array = np.ascontiguousarray(spec.array[mask_size, :, 0])
@@ -76,11 +77,25 @@ class HalationTask(OpenCL):
 
         mask = Buffer(self.context, array=mask_array, args=(spec,))
         # logger.debug(mask_array)
-        image.clear_image()
+
+        # input_array = image.array.copy()
+
+        mask_min, mask_max = mask_range
+        masked_array = (
+            image.array
+            * np.clip((image.array[:, :, 1] - mask_min) / (mask_max - mask_min), 0, 1)[
+                :, :, np.newaxis
+            ]
+        )
+
+        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        processor.applyRGBA(masked_array)
+
+        masked_image = Image(self.context, array=masked_array)
 
         # run program
-        self.kernel.set_arg(0, image.image)
-        self.kernel.set_arg(1, temp.image)
+        self.kernel.set_arg(0, masked_image.image)
+        self.kernel.set_arg(1, temp1.image)
         self.kernel.set_arg(2, mask.buffer)
         self.kernel.set_arg(3, np.int32(mask_size))
 
@@ -93,8 +108,8 @@ class HalationTask(OpenCL):
         )
 
         # run program
-        self.kernel2.set_arg(0, temp.image)
-        self.kernel2.set_arg(1, halation.image)
+        self.kernel2.set_arg(0, temp1.image)
+        self.kernel2.set_arg(1, temp2.image)
         self.kernel2.set_arg(2, mask.buffer)
         self.kernel2.set_arg(3, np.int32(mask_size))
 
@@ -107,23 +122,25 @@ class HalationTask(OpenCL):
         )
 
         cl.enqueue_copy(
-            self.queue, halation.array, halation.image, origin=(0, 0), region=(w, h)
+            self.queue, temp2.array, temp2.image, origin=(0, 0), region=(w, h)
         )
 
-        output_array = image.array.copy()
-        output_array += halation.array
+        processor = ocio.colorspace_processor(dst_name='CIE-XYZ-D65')
+        processor.applyRGBA(temp2.array)
 
-        # max_density = 3
-        # S = 10
-        # a = 1.1
-        # C = 1
-        # density = np.log10(1 + S * np.power(image_array, a)) + C
-        # image_array = density / max_density
+        output_array = np.clip(image.array + temp2.array * amount, 0, 1)
 
-        output = Image(self.context, array=output_array, args=(image, spec))
+        output = Image(
+            self.context, array=output_array, args=(image, spec, mask_range, amount)
+        )
 
         return output
 
-    def run(self, project: Project, spec: Image, image: Image) -> Image:
-        image = self.render(image=image, spec=spec)
+    def run(self, project: Project, image: Image, spec: Image) -> Image:
+        image = self.render(
+            image=image,
+            spec=spec,
+            mask_range=project.ggx.mask.toTuple(),
+            amount=project.ggx.amount,
+        )
         return image

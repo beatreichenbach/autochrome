@@ -107,6 +107,8 @@ class GrainTask(OpenCL):
         bounds: tuple[float, float, float, float],
         spectrals: tuple[Image, ...],
         spec: Image,
+        halation_mask_range: tuple[float, float],
+        halation_amount: float,
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -185,11 +187,39 @@ class GrainTask(OpenCL):
             # continue
             # if c > 1:
             #     continue
+
+            layer = spectral.array.copy()
             if c == 0:
-                halation = self.halation_task.render(spectral, spec)
-            else:
-                halation = spectral
-            mean = np.mean(halation.array, axis=2)
+                halation = self.halation_task.render(
+                    spectral, spec, halation_mask_range, halation_amount
+                )
+                layer = halation.array.copy()
+
+            # layer += 0.001
+            mean = (
+                layer[:, :, 0] * 0.2126
+                + layer[:, :, 1] * 0.7152
+                + layer[:, :, 2] * 0.0722
+            )
+            # mean = np.mean(layer, axis=2)
+            mean += 0.02
+
+            # smooth toe
+            # if c == 0:
+            #     min_value = 0.05
+            # elif c == 1:
+            #     min_value = 0.1
+            # elif c == 2:
+            #     min_value = 0.15
+            # else:
+            #     min_value = 0
+            # toe = 2
+            # input_array = (
+            #     min_value
+            #     + (1.0 - min_value)
+            #     * np.clip((mean - min_value) / (1 - min_value), 0, 1) ** toe
+            # )
+
             image = Image(self.context, array=mean)
 
             self.kernel.set_arg(0, image.image)
@@ -204,8 +234,10 @@ class GrainTask(OpenCL):
                 self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
             )
 
-            output_array += halation.array * (grain.array / mean)[:, :, np.newaxis]
-            # output += mean[:, :, np.newaxis]
+            result = layer * (grain.array / mean)[:, :, np.newaxis]
+            output_array += result
+            # output_array += result - halation.array
+            # output_array += mean[:, :, np.newaxis]
 
         processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
         processor.applyRGBA(output_array)
@@ -223,6 +255,8 @@ class GrainTask(OpenCL):
                 seed_offset,
                 spectrals,
                 spec,
+                halation_mask_range,
+                halation_amount,
             ),
         )
 
@@ -249,5 +283,7 @@ class GrainTask(OpenCL):
             bounds=bounds,
             spectrals=spectrals,
             spec=spec,
+            halation_mask_range=project.ggx.mask.toTuple(),
+            halation_amount=project.ggx.amount,
         )
         return image

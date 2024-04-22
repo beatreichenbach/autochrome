@@ -529,9 +529,10 @@ def test_decomposition():
 #
 #     return sd
 
+standard_illuminant = 'A'
 
 # chromaticity coordinates
-chromaticity_coordinates = np.array(COORDS['D65'])
+chromaticity_coordinates = np.array(COORDS[standard_illuminant])
 whitepoint = xyy_to_xyz(xy_to_xyy(chromaticity_coordinates))
 
 # lambdas
@@ -546,7 +547,7 @@ cmfs = np.column_stack(
 )
 
 # illuminant
-illuminant_data = ILLUMINANTS_CIE['D65']
+illuminant_data = ILLUMINANTS_CIE[standard_illuminant]
 illuminant_keys = np.array(list(illuminant_data.keys()))
 illuminant_values = np.array(list(illuminant_data.values()))
 illuminant = np.interp(lambdas, illuminant_keys, illuminant_values)
@@ -556,7 +557,7 @@ xyz_table /= np.sum(xyz_table, axis=0)
 
 resolution = 16
 
-model_path = '/home/beat/dev/autochrome/autochrome/api/tasks/model.npy'
+model_path = '/home/beat/dev/autochrome/autochrome/api/tasks/model_a.npy'
 
 
 def main():
@@ -570,9 +571,9 @@ def main():
     # logger.info(f'whitepoint_d65: {xyy_to_xyz(xy_to_xyy(chromaticity_coordinates))}')
 
     # model
-    # model = optimize(resolution)
-    # np.save(model_path, model)
-    # return
+    model = optimize(resolution)
+    np.save(model_path, model)
+    return
 
     # xyz
     srgb = np.array([0.9, 0.1, 0.6])

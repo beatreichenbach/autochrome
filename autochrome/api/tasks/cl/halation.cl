@@ -22,7 +22,6 @@
 //     write_imagef(dstImag, pos, sum);
 // }
 
-
 __kernel void ConvolveH(
     __read_only image2d_t inputImage,
     __write_only image2d_t outputImage

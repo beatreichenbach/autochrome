@@ -28,15 +28,13 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = (
-        '/home/beat/dev/autochrome/data/alex_fry/kodak_ektachrome_e100/image_06_dslr.jpg'
-    )
+    image_path: str = '/home/beat/dev/autochrome/data/color_checker.exr'
 
 
 @hashable_dataclass
 class Grain:
-    samples: int = 256
-    grain_mu: float = 0.05
+    samples: int = 1024
+    grain_mu: float = 0.01
     grain_sigma: float = 0.0
     blur_sigma: float = 0.5
     seed_offset: int = 0
@@ -51,10 +49,12 @@ class Spectral:
 
 @hashable_dataclass
 class GGX:
-    roughness: float = 0.1
+    roughness: float = 0.2
     height: float = 1.0
     light_position: QtCore.QPointF = deep_field(QtCore.QPointF(0.5, 0.5))
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(16, 16))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(256, 256))
+    mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.1, 0.2))
+    amount: float = 1
 
 
 @hashable_dataclass
@@ -69,7 +69,7 @@ class Output:
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(512, 512))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(1024, 1024))
 
     # system
     device: str = ''

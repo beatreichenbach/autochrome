@@ -131,6 +131,16 @@ class ProjectEditor(ParameterEditor):
         parm.set_keep_ratio(False)
         ggx_group.add_parameter(parm)
 
+        parm = PointFParameter(name='mask')
+        ggx_group.add_parameter(parm)
+
+        parm = FloatParameter(name='amount')
+        parm.set_line_min(0)
+        parm.set_line_max(1)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        ggx_group.add_parameter(parm)
+
         # render
         box = self.add_group('render')
         box.set_box_style(ParameterBox.SIMPLE)

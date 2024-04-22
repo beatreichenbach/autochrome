@@ -12,7 +12,10 @@ from autochrome.api.path import File
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
 from autochrome.data.cmfs import CMFS
 from autochrome.data.illuminants import ILLUMINANTS_CIE
-from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
+
+from autochrome.resources.curves.kodak_ektachrome_100 import SENSITIVITY, DYE_DENSITY
+
+# from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
 from autochrome.utils import ocio
 from autochrome.utils.timing import timer
 
@@ -69,7 +72,7 @@ class SpectralTask(OpenCL):
             'xyz_to_mask': cl.Kernel(self.program, 'xyz_to_mask'),
         }
 
-    @lru_cache(1)
+    # @lru_cache(1)
     def load_file(self, file: File, resolution: QtCore.QSize) -> Image:
         # load array
         filename = str(file)
@@ -77,7 +80,6 @@ class SpectralTask(OpenCL):
             array = cv2.imread(filename, cv2.IMREAD_COLOR | cv2.IMREAD_ANYDEPTH)
             array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
         except ValueError as e:
-            logger.debug(e)
             message = f'Invalid Image path: {filename}'
             raise EngineError(message) from None
 
@@ -97,7 +99,7 @@ class SpectralTask(OpenCL):
 
     @lru_cache(1)
     def update_model(self) -> Buffer:
-        model_path = '/home/beat/dev/autochrome/autochrome/api/tasks/model.npy'
+        model_path = '/home/beat/dev/autochrome/autochrome/api/tasks/model_d65.npy'
         model_file = File(model_path)
         values = np.load(model_path)
         model = np.zeros(len(values), cl.cltypes.float)
@@ -215,7 +217,6 @@ class SpectralTask(OpenCL):
         return pattern
 
     @timer
-    @lru_cache(1)
     def spectral_image(
         self,
         image_file: File,
@@ -224,14 +225,14 @@ class SpectralTask(OpenCL):
         if self.rebuild:
             self.build()
         image = self.load_file(image_file, resolution)
-        image.clear_image()
 
-        processor = ocio.colorspace_processor(
-            src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
-        )
+        # processor = ocio.colorspace_processor(
+        #     src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
+        # )
+        processor = ocio.colorspace_processor(dst_name='CIE-XYZ-D65')
         processor.applyRGBA(image.array)
 
-        min_val, max_val = normalize_image(image)
+        # min_val, max_val = normalize_image(image)
         # logger.debug(f'image_values: {image.array[0, 0]}')
 
         model_resolution = 16
@@ -253,6 +254,7 @@ class SpectralTask(OpenCL):
         spectral_b.args = (resolution, model_resolution, image_file)
         # image.clear_image()
 
+        image.clear_image()
         # run program
         kernel = self.kernels['xyz_to_mask']
         kernel.set_arg(0, image.image)
@@ -294,8 +296,6 @@ class SpectralTask(OpenCL):
         # )
 
         # un_normalize_image(spectral, min_val, max_val)
-        # processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-        # processor.applyRGBA(spectral.array)
         # spectral.array[:, :, :] = 0.3
 
         return spectral_r, spectral_g, spectral_b

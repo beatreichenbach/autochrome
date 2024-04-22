@@ -212,8 +212,11 @@ __kernel void xyz_to_mask(
         float lambda_rel = (float) i / (LAMBDA_COUNT - 1);
         float spectrum_value = eval_precise(coefficients, lambda_rel);
 
-
-        float4 ratio = sensitivity[i] / (sensitivity[i].x + sensitivity[i].y + sensitivity[i].z);
+        float sum = sensitivity[i].x + sensitivity[i].y + sensitivity[i].z;
+        float4 ratio = 0;
+        if (sum != 0) {
+            ratio = sensitivity[i] /  sum;
+        }
 
         integral += cmfs[i] * illuminant[i];
         // emulsion += cmfs[i] * illuminant[i] * spectrum_value;
