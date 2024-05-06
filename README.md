@@ -62,3 +62,7 @@ https://github.com/nbvdkamp/rgb2spec-rs
 
 
 https://www.photrio.com/forum/threads/an-alternative-to-negative-lab-pro-and-lr-has-to-exist-c-41-reversal-and-orange-mask-removal.166696/post-2170267
+
+https://125px.com/docs/film/fuji/superia_xtra800_datasheet.pdf
+https://imaging.kodakalaris.com/sites/default/files/files/products/e4000_ektachrome_100.pdf
+https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf
