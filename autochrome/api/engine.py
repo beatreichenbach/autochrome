@@ -61,7 +61,7 @@ class Engine(QtCore.QObject):
     def spectral(self, project: Project) -> Image:
         images = self.spectral_task.run(project)
 
-        image = images[0]
+        image = images[2]
 
         processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
         processor.applyRGBA(image.array)

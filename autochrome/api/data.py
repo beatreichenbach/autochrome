@@ -28,18 +28,19 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/data/color_checker.exr'
+    image_path: str = '/home/beat/dev/autochrome/data/DSC03544.exr'
 
 
 @hashable_dataclass
 class Grain:
     samples: int = 1024
-    grain_mu: float = 0.01
+    grain_mu: float = 0.02
     grain_sigma: float = 0.0
     blur_sigma: float = 0.5
     seed_offset: int = 0
     bounds_min: QtCore.QPoint = deep_field(QtCore.QPoint(0, 0))
     bounds_max: QtCore.QPoint = deep_field(QtCore.QPoint(1363, 2048))
+    lift: float = 0.000
 
 
 @hashable_dataclass
@@ -54,22 +55,22 @@ class GGX:
     light_position: QtCore.QPointF = deep_field(QtCore.QPointF(0.5, 0.5))
     resolution: QtCore.QSize = deep_field(QtCore.QSize(256, 256))
     mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.1, 0.2))
-    amount: float = 1
+    amount: float = 0.5
 
 
 @hashable_dataclass
 class Output:
     write: bool = False
-    element: RenderElement = RenderElement.GRAIN
-    path: str = '/home/beat/dev/autochrome/output.jpg'
-    colorspace: str = 'sRGB - Display'
+    element: RenderElement = RenderElement.SPECTRAL
+    path: str = '/home/beat/dev/autochrome/output_portra_green.exr'
+    colorspace: str = 'ACEScg'
     frame: int = 0
 
 
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(1024, 1024))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(1920, 817))
 
     # system
     device: str = ''

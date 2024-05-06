@@ -105,6 +105,12 @@ class ProjectEditor(ParameterEditor):
         parm = PointParameter(name='bounds_max')
         grain_group.add_parameter(parm)
 
+        parm = FloatParameter(name='lift')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(0.1)
+        grain_group.add_parameter(parm)
+
         # ggx
 
         box = self.add_group('ggx')

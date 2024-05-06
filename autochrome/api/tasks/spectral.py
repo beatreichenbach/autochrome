@@ -15,7 +15,7 @@ from autochrome.data.illuminants import ILLUMINANTS_CIE
 
 from autochrome.resources.curves.kodak_ektachrome_100 import SENSITIVITY, DYE_DENSITY
 
-# from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
+from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
 from autochrome.utils import ocio
 from autochrome.utils.timing import timer
 
@@ -232,8 +232,8 @@ class SpectralTask(OpenCL):
         processor = ocio.colorspace_processor(dst_name='CIE-XYZ-D65')
         processor.applyRGBA(image.array)
 
-        # min_val, max_val = normalize_image(image)
-        # logger.debug(f'image_values: {image.array[0, 0]}')
+        min_val, max_val = normalize_image(image)
+        logger.debug(f'{min_val=}, {max_val=}')
 
         model_resolution = 16
         scale = self.update_scale(model_resolution)

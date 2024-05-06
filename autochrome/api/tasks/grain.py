@@ -109,6 +109,7 @@ class GrainTask(OpenCL):
         spec: Image,
         halation_mask_range: tuple[float, float],
         halation_amount: float,
+        lift: float,
     ) -> Image:
         if self.rebuild:
             self.build()
@@ -195,7 +196,8 @@ class GrainTask(OpenCL):
                 )
                 layer = halation.array.copy()
 
-            # layer += 0.001
+            layer += lift
+            # layer = np.power(layer, 1 / 2.2)
             mean = (
                 layer[:, :, 0] * 0.2126
                 + layer[:, :, 1] * 0.7152
@@ -257,6 +259,7 @@ class GrainTask(OpenCL):
                 spec,
                 halation_mask_range,
                 halation_amount,
+                lift,
             ),
         )
 
@@ -285,5 +288,6 @@ class GrainTask(OpenCL):
             spec=spec,
             halation_mask_range=project.ggx.mask.toTuple(),
             halation_amount=project.ggx.amount,
+            lift=project.grain.lift,
         )
         return image
