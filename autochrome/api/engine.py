@@ -64,6 +64,7 @@ class Engine(QtCore.QObject):
         image = images[2]
 
         processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        # processor = ocio.colorspace_processor(src_name='Utility - XYZ - D60')
         processor.applyRGBA(image.array)
 
         return image
@@ -79,6 +80,7 @@ class Engine(QtCore.QObject):
         spectrals = self.spectral_task.run(project)
         image = self.halation_task.run(project, spectrals[0], spec)
         processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        # processor = ocio.colorspace_processor(src_name='Utility - XYZ - D60')
         processor.applyRGBA(image.array)
         return image
 

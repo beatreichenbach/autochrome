@@ -5,6 +5,7 @@ from functools import lru_cache
 import cv2
 import numpy as np
 import pyopencl as cl
+import PyOpenColorIO as OCIO
 from PySide2 import QtCore
 
 from autochrome.api.data import Project, EngineError
@@ -14,7 +15,6 @@ from autochrome.data.cmfs import CMFS
 from autochrome.data.illuminants import ILLUMINANTS_CIE
 
 from autochrome.resources.curves.kodak_ektachrome_100 import SENSITIVITY, DYE_DENSITY
-
 from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
 from autochrome.utils import ocio
 from autochrome.utils.timing import timer
@@ -36,9 +36,7 @@ def smoothstep(x: float) -> float:
 def normalize_image(image: Image) -> tuple:
     min_val = np.min(image.array[:, :, :3])
     max_val = np.max(image.array[:, :, :3])
-    lift = 0.01
-    lift = 0
-    image._array = (image.array - min_val + lift) / (max_val + lift - min_val)
+    image._array = (image.array - min_val) / (max_val - min_val)
     return min_val, max_val
 
 
@@ -226,10 +224,11 @@ class SpectralTask(OpenCL):
             self.build()
         image = self.load_file(image_file, resolution)
 
-        # processor = ocio.colorspace_processor(
-        #     src_name='sRGB - Display', dst_name='CIE-XYZ-D65'
-        # )
         processor = ocio.colorspace_processor(dst_name='CIE-XYZ-D65')
+        # processor = ocio.colorspace_processor(dst_name='Utility - XYZ - D60')
+        # processor = ocio.colorspace_processor(
+        #     src_name='Output - sRGB', dst_name='Utility - XYZ - D60'
+        # )
         processor.applyRGBA(image.array)
 
         min_val, max_val = normalize_image(image)

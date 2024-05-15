@@ -66,3 +66,11 @@ https://www.photrio.com/forum/threads/an-alternative-to-negative-lab-pro-and-lr-
 https://125px.com/docs/film/fuji/superia_xtra800_datasheet.pdf
 https://imaging.kodakalaris.com/sites/default/files/files/products/e4000_ektachrome_100.pdf
 https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf
+
+
+https://stocksnap.io/photo/female-portrait-UOBQKFXUIG
+https://stocksnap.io/photo/male-portrait-NLX0RAPBGB
+https://stocksnap.io/photo/woman-female-JDXWHY8CIN
+https://stocksnap.io/photo/female-portrait-NWFLCH8IBN
+https://stocksnap.io/photo/woman-beach-FJCOO6JWDP
+https://stocksnap.io/photo/urban-female-9EHZ6COVCM

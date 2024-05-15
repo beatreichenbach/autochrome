@@ -116,27 +116,6 @@ class GrainTask(OpenCL):
 
         bounds = (0, 0, resolution.width(), resolution.height())
 
-        # image_array = self.load_file(image_file, resolution)
-        # image_array = np.dstack(
-        #     (image_array, np.zeros(image_array.shape[:2], np.float32))
-        # )
-        # processor = ocio.colorspace_processor(
-        #     src_name='sRGB - Display', dst_name='ACEScc'
-        # )
-        # processor.applyRGBA(image_array)
-
-        # processor = ocio.colorspace_processor(dst_name='ACEScc')
-        # processor.applyRGBA(halation.array)
-
-        # min_val, max_val = normalize_image(halation)
-        # logger.debug((min_val, max_val))
-        # halation.array[:, :, 3] = 0
-
-        # logger.debug(f'image_array_shape: {image_array.shape}')
-        # image = Image(self.context, image_array, args=str(image_file))
-        # logger.debug(image.shape)
-        # min_val, max_val = normalize_image(image)
-
         lut = self.update_lambda_lut(grain_mu, grain_sigma, count=256)
 
         # create output buffer
@@ -170,18 +149,10 @@ class GrainTask(OpenCL):
         self.kernel.set_arg(8, render_bounds)
 
         w, h = resolution.width(), resolution.height()
+        output_array = np.zeros((h, w, 4), np.float32)
+
         global_work_size = (w, h)
         local_work_size = None
-
-        # cl.enqueue_nd_range_kernel(
-        #     self.queue, self.kernel, global_work_size, local_work_size
-        # )
-        # cl.enqueue_copy(
-        #     self.queue, grain.array, grain.image, origin=(0, 0), region=(w, h)
-        # )
-        # output = grain.array
-
-        output_array = np.zeros((h, w, 4), np.float32)
 
         for c, spectral in enumerate(spectrals):
             # output += spectral.array
@@ -190,7 +161,7 @@ class GrainTask(OpenCL):
             #     continue
 
             layer = spectral.array.copy()
-            if c == 0:
+            if c == 0 and halation_amount > 0:
                 halation = self.halation_task.render(
                     spectral, spec, halation_mask_range, halation_amount
                 )
@@ -242,6 +213,7 @@ class GrainTask(OpenCL):
             # output_array += mean[:, :, np.newaxis]
 
         processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
+        # processor = ocio.colorspace_processor(src_name='Utility - XYZ - D60')
         processor.applyRGBA(output_array)
 
         grain = Image(

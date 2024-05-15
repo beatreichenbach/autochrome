@@ -28,13 +28,15 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/dev/autochrome/data/DSC03544.exr'
+    image_path: str = (
+        '/home/beat/dev/autochrome/data/stocksnap/StockSnap_JDXWHY8CIN.jpg'
+    )
 
 
 @hashable_dataclass
 class Grain:
     samples: int = 1024
-    grain_mu: float = 0.02
+    grain_mu: float = 0.1
     grain_sigma: float = 0.0
     blur_sigma: float = 0.5
     seed_offset: int = 0
@@ -54,15 +56,15 @@ class GGX:
     height: float = 1.0
     light_position: QtCore.QPointF = deep_field(QtCore.QPointF(0.5, 0.5))
     resolution: QtCore.QSize = deep_field(QtCore.QSize(256, 256))
-    mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.1, 0.2))
+    mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.2, 0.4))
     amount: float = 0.5
 
 
 @hashable_dataclass
 class Output:
     write: bool = False
-    element: RenderElement = RenderElement.SPECTRAL
-    path: str = '/home/beat/dev/autochrome/output_portra_green.exr'
+    element: RenderElement = RenderElement.GRAIN
+    path: str = '/home/beat/dev/autochrome/data/stocksnap/StockSnap_JDXWHY8CIN_0.1.exr'
     colorspace: str = 'ACEScg'
     frame: int = 0
 
@@ -70,7 +72,7 @@ class Output:
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(1920, 817))
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(2064, 1376))
 
     # system
     device: str = ''

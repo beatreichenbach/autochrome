@@ -59,7 +59,7 @@ __kernel void BRDF(
 
 	float3 view_dir = normalize(camera_position - position);
 
-	view_dir = (float3) (0, 1, 0);
+	// view_dir = (float3) (0, 1, 0);
 
     float3 half_vec = normalize(view_dir + light_dir);
     float NoV = fabs(dot(normal, view_dir)) + 1e-5;
