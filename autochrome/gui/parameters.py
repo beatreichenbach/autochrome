@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 import random
+from typing import Optional
 
 from PySide2 import QtWidgets, QtCore
 
@@ -23,11 +25,49 @@ from qt_extensions.parameters import (
     StringParameter,
     TabDataParameter,
 )
+from qt_extensions.parameters.widgets import MultiFloatParameter
+
 from qt_extensions.typeutils import cast, basic
 
 # from autochrome.storage import Storage
 
 # storage = Storage()
+
+
+@dataclasses.dataclass
+class Vector3F:
+    x: float = 0
+    y: float = 0
+    z: float = 0
+
+    def __iter__(self):
+        return iter((self.x, self.y, self.z))
+
+    def __len__(self):
+        return len((self.x, self.y, self.z))
+
+    def __getitem__(self, index):
+        return (self.x, self.y, self.z)[index]
+
+
+class Vector3FParameter(MultiFloatParameter):
+    multi_count = 3
+    value_changed: QtCore.Signal = QtCore.Signal(Vector3F)
+
+    _value: Vector3F = Vector3F(0, 0, 0)
+    _default: Vector3F = Vector3F(0, 0, 0)
+
+    def set_value(self, value: Vector3F | list | tuple) -> None:
+        super().set_value(value)
+
+    def value(self) -> Vector3F:
+        return super().value()
+
+    def _cast_to_type(self, values: tuple[float, ...]) -> Vector3F:
+        return Vector3F(*values[:3])
+
+    def _cast_to_tuple(self, value: Vector3F) -> tuple[float, ...]:
+        return tuple(value)
 
 
 class ProjectEditor(ParameterEditor):
@@ -53,17 +93,21 @@ class ProjectEditor(ParameterEditor):
         parm = PathParameter(name='image_path')
         input_group.add_parameter(parm)
 
+        parm = StringParameter('colorspace')
+        parm.set_menu(ocio.colorspace_names())
+        parm.set_tooltip('Colorspace from the OCIO config.\nFor example: ACES - ACEScg')
+        input_group.add_parameter(parm)
+
         # spectral
         box = self.add_group('spectral')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
         spectral_group = box.form
 
-        parm = IntParameter(name='wavelength')
+        parm = IntParameter(name='wavelength_count')
         parm.set_line_min(380)
         parm.set_line_max(780)
-        parm.set_slider_min(380)
-        parm.set_slider_max(780)
+        parm.set_slider_visible(False)
         spectral_group.add_parameter(parm)
 
         # grain
@@ -97,12 +141,6 @@ class ProjectEditor(ParameterEditor):
         parm.set_line_min(0)
         parm.set_slider_min(0)
         parm.set_slider_max(1)
-        grain_group.add_parameter(parm)
-
-        parm = PointParameter(name='bounds_min')
-        grain_group.add_parameter(parm)
-
-        parm = PointParameter(name='bounds_max')
         grain_group.add_parameter(parm)
 
         parm = FloatParameter(name='lift')
