@@ -67,6 +67,7 @@ class Storage(JSONStorage, metaclass=Singleton):
         if self._path is None:
             data_home = os.getenv('XDG_DATA_HOME', os.path.expanduser('~'))
             self._path = os.path.join(data_home, autochrome.__name__)
+        logger.debug(f'Storage path: {self._path}')
 
         # settings
         self._settings_path = os.path.join(self._path, 'settings.json')

@@ -29,7 +29,7 @@ class ElementViewer(Viewer):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._element = RenderElement.SPECTRAL
+        self._element = RenderElement.GRAIN
 
         self.element_parm = EnumParameter('element')
         self.element_parm.set_enum(RenderElement)

@@ -27,9 +27,8 @@ LAMBDA_MID = (LAMBDA_MIN + LAMBDA_MAX) / 2
 
 
 class MemoryObject:
-    # this objects helps to transfer data between host and devices
-    # it also stores the args used to generate the data which are used to
-    # make the object hashable
+    # This object transfers data between host and devices, it stores the args used to
+    # generate the data to make the object hashable
 
     def __init__(
         self,

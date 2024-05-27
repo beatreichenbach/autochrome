@@ -17,7 +17,7 @@ from autochrome.api.tasks.ggx import GGXTask
 from autochrome.api.tasks.grain import GrainTask
 from autochrome.api.tasks.halation import HalationTask
 from autochrome.api.tasks.opencl import Image
-from autochrome.api.tasks.spectral import SpectralTask
+from autochrome.api.tasks.spectral import EmulsionTask
 from autochrome.storage import Storage
 
 from autochrome.utils import ocio
@@ -44,22 +44,22 @@ class Engine(QtCore.QObject):
 
     def _init_renderers(self) -> None:
         self.renderers: dict[RenderElement, Callable] = OrderedDict()
-        self.renderers[RenderElement.SPECTRAL] = self.spectral
-        self.renderers[RenderElement.GRAIN] = self.grain
+        self.renderers[RenderElement.EMULSION] = self.emulsion
         self.renderers[RenderElement.GGX] = self.ggx
         self.renderers[RenderElement.HALATION] = self.halation
+        self.renderers[RenderElement.GRAIN] = self.grain
 
     def _init_tasks(self) -> None:
-        self.grain_task = GrainTask(self.queue)
-        self.spectral_task = SpectralTask(self.queue)
+        self.emulsion_task = EmulsionTask(self.queue)
         self.ggx_task = GGXTask(self.queue)
         self.halation_task = HalationTask(self.queue)
+        self.grain_task = GrainTask(self.queue)
 
     def elements(self) -> list[RenderElement]:
         return self._elements
 
-    def spectral(self, project: Project) -> Image:
-        images = self.spectral_task.run(project)
+    def emulsion(self, project: Project) -> Image:
+        images = self.emulsion_task.run(project)
 
         image = images[2]
 
@@ -122,7 +122,7 @@ class Engine(QtCore.QObject):
         self._emit_cache = {}
 
     def emit_image(self, image: Image, element: RenderElement) -> None:
-        # emits image_rendered signal if hash for that element has changed
+        # NOTE: Emits image_rendered signal if hash for that element has changed
         # one hash per element is stored, so lru_cache is not used here
         _hash = hash(image)
         if self._emit_cache.get(element) != _hash:

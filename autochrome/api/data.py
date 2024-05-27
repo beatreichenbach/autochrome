@@ -14,10 +14,17 @@ class EngineError(ValueError):
 
 @enum.unique
 class RenderElement(enum.Enum):
-    GRAIN = enum.auto()
-    SPECTRAL = enum.auto()
+    EMULSION = enum.auto()
     GGX = enum.auto()
     HALATION = enum.auto()
+    GRAIN = enum.auto()
+
+
+@enum.unique
+class EmulsionLayer(enum.Enum):
+    red = enum.auto()
+    green = enum.auto()
+    blue = enum.auto()
 
 
 @hashable_dataclass
@@ -31,33 +38,45 @@ class Input:
     image_path: str = (
         '/home/beat/dev/autochrome/data/stocksnap/StockSnap_JDXWHY8CIN.jpg'
     )
+    colorspace: str = 'Output - sRGB'
 
 
 @hashable_dataclass
-class Grain:
-    samples: int = 1024
-    grain_mu: float = 0.1
-    grain_sigma: float = 0.0
-    blur_sigma: float = 0.5
-    seed_offset: int = 0
-    bounds_min: QtCore.QPoint = deep_field(QtCore.QPoint(0, 0))
-    bounds_max: QtCore.QPoint = deep_field(QtCore.QPoint(1363, 2048))
-    lift: float = 0.000
+class Emulsion:
+    wavelength_count: int = 21
+    model_resolution: int = 16
+    lambda_count: int = 21
+    isolate_layer: EmulsionLayer | None = None
 
 
 @hashable_dataclass
-class Spectral:
-    wavelength: int = 560
-
-
-@hashable_dataclass
-class GGX:
+class Halation:
     roughness: float = 0.2
     height: float = 1.0
     light_position: QtCore.QPointF = deep_field(QtCore.QPointF(0.5, 0.5))
     resolution: QtCore.QSize = deep_field(QtCore.QSize(256, 256))
     mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.2, 0.4))
     amount: float = 0.5
+    effect_only: bool = False
+
+
+@hashable_dataclass
+class Grain:
+    samples: int = 1024
+    blur_sigma: float = 0.5
+    seed_offset: int = 0
+    grain_mu: float = 0.1
+    grain_sigma: float = 0.0
+    lift: float = 0.000
+
+
+@hashable_dataclass
+class Render:
+    # renderer
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(512, 512))
+
+    # system
+    device: str = ''
 
 
 @hashable_dataclass
@@ -70,19 +89,10 @@ class Output:
 
 
 @hashable_dataclass
-class Render:
-    # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(2064, 1376))
-
-    # system
-    device: str = ''
-
-
-@hashable_dataclass
 class Project:
     input: Input = field(default_factory=Input)
-    spectral: Spectral = field(default_factory=Spectral)
+    emulsion: Emulsion = field(default_factory=Emulsion)
+    halation: Halation = field(default_factory=Halation)
     grain: Grain = field(default_factory=Grain)
-    ggx: GGX = field(default_factory=GGX)
-    output: Output = field(default_factory=Output)
     render: Render = field(default_factory=Render)
+    output: Output = field(default_factory=Output)

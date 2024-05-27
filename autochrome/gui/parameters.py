@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
-import random
-from typing import Optional
 
 from PySide2 import QtWidgets, QtCore
 
 from autochrome.api.data import Project, RenderElement
 from autochrome.utils import ocio
-from qt_extensions import helper
 from qt_extensions.parameters import (
-    BoolParameter,
     EnumParameter,
     FloatParameter,
     IntParameter,
@@ -19,15 +15,12 @@ from qt_extensions.parameters import (
     ParameterWidget,
     PathParameter,
     PointFParameter,
-    PointParameter,
-    SizeFParameter,
     SizeParameter,
     StringParameter,
-    TabDataParameter,
 )
 from qt_extensions.parameters.widgets import MultiFloatParameter
-
 from qt_extensions.typeutils import cast, basic
+
 
 # from autochrome.storage import Storage
 
@@ -99,59 +92,23 @@ class ProjectEditor(ParameterEditor):
         input_group.add_parameter(parm)
 
         # spectral
-        box = self.add_group('spectral')
+        box = self.add_group('emulsion')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
         spectral_group = box.form
 
         parm = IntParameter(name='wavelength_count')
-        parm.set_line_min(380)
-        parm.set_line_max(780)
+        parm.set_line_min(3)
         parm.set_slider_visible(False)
         spectral_group.add_parameter(parm)
 
-        # grain
-        box = self.add_group('grain')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
-        grain_group = box.form
-
-        parm = IntParameter(name='samples')
-        parm.set_line_min(0)
+        parm = IntParameter(name='model_resolution')
+        parm.set_line_min(2)
         parm.set_slider_visible(False)
-        grain_group.add_parameter(parm)
+        spectral_group.add_parameter(parm)
 
-        parm = IntParameter(name='seed_offset')
-        parm.set_slider_visible(False)
-        grain_group.add_parameter(parm)
-
-        parm = FloatParameter(name='grain_mu')
-        parm.set_line_min(0.0001)
-        parm.set_slider_min(0)
-        parm.set_slider_max(1)
-        grain_group.add_parameter(parm)
-
-        parm = FloatParameter(name='grain_sigma')
-        parm.set_line_min(0)
-        parm.set_slider_min(0)
-        parm.set_slider_max(1)
-        grain_group.add_parameter(parm)
-
-        parm = FloatParameter(name='blur_sigma')
-        parm.set_line_min(0)
-        parm.set_slider_min(0)
-        parm.set_slider_max(1)
-        grain_group.add_parameter(parm)
-
-        parm = FloatParameter(name='lift')
-        parm.set_line_min(0)
-        parm.set_slider_min(0)
-        parm.set_slider_max(0.1)
-        grain_group.add_parameter(parm)
-
-        # ggx
-
-        box = self.add_group('ggx')
+        # halation
+        box = self.add_group('halation')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
         ggx_group = box.form
@@ -185,6 +142,57 @@ class ProjectEditor(ParameterEditor):
         parm.set_slider_max(1)
         ggx_group.add_parameter(parm)
 
+        # grain
+        box = self.add_group('grain')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        grain_group = box.form
+
+        box = grain_group.add_group('render')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        grain_render_group = box.form
+        grain_render_group.create_hierarchy = False
+
+        parm = IntParameter(name='samples')
+        parm.set_line_min(0)
+        parm.set_slider_visible(False)
+        grain_render_group.add_parameter(parm)
+
+        parm = FloatParameter(name='blur_sigma')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        grain_render_group.add_parameter(parm)
+
+        box = grain_group.add_group('distribution')
+        box.set_box_style(ParameterBox.SIMPLE)
+        box.set_collapsible(False)
+        grain_distribution_group = box.form
+        grain_distribution_group.create_hierarchy = False
+
+        parm = IntParameter(name='seed_offset')
+        parm.set_slider_visible(False)
+        grain_distribution_group.add_parameter(parm)
+
+        parm = FloatParameter(name='grain_mu')
+        parm.set_line_min(0.0001)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        grain_distribution_group.add_parameter(parm)
+
+        parm = FloatParameter(name='grain_sigma')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(1)
+        grain_distribution_group.add_parameter(parm)
+
+        parm = FloatParameter(name='lift')
+        parm.set_line_min(0)
+        parm.set_slider_min(0)
+        parm.set_slider_max(0.1)
+        grain_distribution_group.add_parameter(parm)
+
         # render
         box = self.add_group('render')
         box.set_box_style(ParameterBox.SIMPLE)
@@ -195,6 +203,9 @@ class ProjectEditor(ParameterEditor):
         parm.set_slider_visible(False)
         parm.set_keep_ratio(False)
         render_group.add_parameter(parm)
+
+        parm = StringParameter('device')
+        input_group.add_parameter(parm)
 
         # output
         box = self.add_group('output')
