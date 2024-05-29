@@ -47,6 +47,9 @@ class Emulsion:
     model_resolution: int = 16
     lambda_count: int = 21
     isolate_layer: EmulsionLayer | None = None
+    curves_file: str = '$CURVES/kodak_ektachrome_100.json'
+    standard_illuminant: str = 'D65'
+    cmfs_variation: str = 'CIE 2015 2 Degree Standard Observer'
 
 
 @hashable_dataclass

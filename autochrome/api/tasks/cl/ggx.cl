@@ -34,17 +34,16 @@ __kernel void BRDF(
     float height,
     float2 light_position
 ) {
-
     int2 p;
     p.x = get_global_id(0);
     p.y = get_global_id(1);
-    int2 size;
+
+    int2 size = (int2);
     size.x = get_global_size(0);
     size.y = get_global_size(1);
 
-    float3 specular_albedo = (float3) (1, 1, 1);
-    float3 normal = (float3) (0, 1, 0);
-
+    const float3 specular_albedo = (float3) (1, 1, 1);
+    const float3 normal = (float3) (0, 1, 0);
 
 	float3 position;
 	position.x = (float) p.x / (size.x - 1);
@@ -56,7 +55,6 @@ __kernel void BRDF(
 	float3 light_position3 = (float3) (light_position.x, 1, light_position.y);
 
 	float3 light_dir = normalize(light_position3 - position);
-
 	float3 view_dir = normalize(camera_position - position);
 
 	// view_dir = (float3) (0, 1, 0);
@@ -67,7 +65,7 @@ __kernel void BRDF(
     float NoH = clamp(dot(normal, half_vec), 0.0f, 1.0f);
     float LoH = clamp(dot(light_dir, half_vec), 0.0f, 1.0f);
 
-    // perceptually linear roughness to roughness (see parameterization)
+    // perceptually linear roughness to roughness
     float roughness = perceptualRoughness * perceptualRoughness;
 
     float D = D_GGX(NoH, roughness);

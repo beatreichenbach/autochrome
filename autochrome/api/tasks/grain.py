@@ -48,19 +48,11 @@ class GrainTask(OpenCL):
     def __init__(self, queue) -> None:
         super().__init__(queue)
         self.halation_task = HalationTask(self.queue)
-        self.kernels = {}
+        self.kernel = None
         self.build()
 
     def build(self, *args, **kwargs) -> None:
-        self.source = ''
-        # self.source += f'#define BATCH_PRIMITIVE_COUNT {BATCH_PRIMITIVE_COUNT}\n'
-
-        # self.register_dtype('Ray', ray_dtype)
-
-        # self.source += f'__constant int BIN_SIZE = {self.bin_size};\n'
-        # self.source += f'__constant int LAMBDA_MIN = {LAMBDA_MIN};\n'
-        # self.source += f'__constant int LAMBDA_MAX = {LAMBDA_MAX};\n'
-        self.source += self.read_source_file('rand.cl')
+        self.source = self.read_source_file('rand.cl')
         self.source += self.read_source_file('grain.cl')
 
         super().build()

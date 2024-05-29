@@ -2,8 +2,10 @@ import os
 
 
 class File:
-    # A File object as a snapshot in time. It is used to check if the file
-    # at the time of creation is the same as the file on disk now.
+    """A File object as a snapshot in time.
+    It is used to check if the file at the time of creation is the same as the file on
+    disk now based on its modification time, not contents.
+    """
 
     def __init__(self, path: str):
         self.path = path

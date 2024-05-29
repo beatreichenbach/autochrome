@@ -1,3 +1,6 @@
+__constant sampler_t SAMPLER_ABS = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
+
+
 // __kernel void convolve_gauss_blur_2D_image(
 //     __read_only image2d_t srcImg,
 //     __write_only image2d_t dstImag,
@@ -28,13 +31,12 @@ __kernel void ConvolveH(
 ,    __constant float* mask,
     int mask_size
 ) {
-    sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
+    const int2 pos = (int2)(get_global_id(0), get_global_id(1));
 
-    int2 pos = (int2)(get_global_id(0), get_global_id(1));
     float4 rgba_in = (float4)(0,0,0,0);
     float4 rgba_out = (float4)(0,0,0,0);
     for(int mask_index = -mask_size; mask_index < mask_size+1; ++mask_index) {
-        rgba_in = read_imagef(inputImage, sampler, pos + (int2)(mask_index, 0));
+        rgba_in = read_imagef(inputImage, SAMPLER_ABS, pos + (int2)(mask_index, 0));
         rgba_out += rgba_in * mask[mask_size + mask_index];
     }
     write_imagef(outputImage, pos, rgba_out);
@@ -46,13 +48,12 @@ __kernel void ConvolveV(
     __constant float* mask,
     int mask_size
 ) {
-    sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_LINEAR;
+    const int2 pos = (int2)(get_global_id(0), get_global_id(1));
 
-    int2 pos = (int2)(get_global_id(0), get_global_id(1));
     float4 rgba_in = (float4)(0,0,0,0);
     float4 rgba_out = (float4)(0,0,0,0);  
     for(int mask_index = -mask_size; mask_index < mask_size+1; ++mask_index) {
-        rgba_in = read_imagef(inputImage, sampler, pos + (int2)(0, mask_index));
+        rgba_in = read_imagef(inputImage, SAMPLER_ABS, pos + (int2)(0, mask_index));
         rgba_out += rgba_in * mask[mask_size + mask_index];
     }
     write_imagef(outputImage, pos, rgba_out);

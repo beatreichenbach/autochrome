@@ -1,4 +1,12 @@
+from functools import lru_cache
+
 import numpy as np
+
+from autochrome.data import (
+    chromaticity_coordinates,
+    color_matching_functions,
+    illuminants,
+)
 
 
 def xy_to_xyy(xy: np.ndarray, y: float = 1) -> np.ndarray:
@@ -61,3 +69,28 @@ def xyz_to_lab(xyz: np.ndarray, whitepoint: np.ndarray) -> np.array:
     b = 200 * (fy - fz)
     lab = np.array((l, a, b))
     return lab
+
+
+def get_cmfs(variation: str, lambdas: np.ndarray) -> np.ndarray:
+    cmfs_data = color_matching_functions.CMFS[variation]
+    cmfs_keys = np.array(list(cmfs_data.keys()))
+    cmfs_values = np.array(list(cmfs_data.values()))
+    cmfs = np.column_stack(
+        [np.interp(lambdas, cmfs_keys, cmfs_values[:, i]) for i in range(3)]
+    )
+    return cmfs
+
+
+def get_illuminant(standard_illuminant: str, lambdas: np.ndarray) -> np.ndarray:
+    illuminant_data = illuminants.ILLUMINANTS_CIE[standard_illuminant]
+    illuminant_keys = np.array(list(illuminant_data.keys()))
+    illuminant_values = np.array(list(illuminant_data.values()))
+    illuminant = np.interp(lambdas, illuminant_keys, illuminant_values)
+    return illuminant
+
+
+@lru_cache(1)
+def get_whitepoint(standard_illuminant: str) -> np.ndarray:
+    coordinated = np.array(chromaticity_coordinates.COORDS[standard_illuminant])
+    whitepoint = xyy_to_xyz(xy_to_xyy(coordinated))
+    return whitepoint

@@ -6,17 +6,44 @@ from functools import lru_cache
 import numpy as np
 
 from autochrome.api.data import Project
-from autochrome.data.chromaticity_coordinates import COORDS
-from autochrome.data.cmfs import CMFS
-from autochrome.data.illuminants import ILLUMINANTS_CIE
+from autochrome.storage import Storage
 from autochrome.utils import color
-
-logger = logging.getLogger(__name__)
+from autochrome.utils.timing import timer
 
 EPSILON = 0.0001
 COEFFICIENTS_COUNT = 3
 LAMBDA_MIN = 390
 LAMBDA_MAX = 830
+
+logger = logging.getLogger(__name__)
+storage = Storage()
+
+
+def hash_args(*args) -> str:
+    h = hashlib.md5()
+    for arg in args:
+        h.update(str.encode(str(arg)))
+    return h.hexdigest()
+
+
+@lru_cache(10)
+def get_model_path(project: Project, cache_dir: str = '') -> str:
+    args = (
+        project.render.resolution,
+        project.emulsion.standard_illuminant,
+        project.emulsion.cmfs_variation,
+        project.emulsion.lambda_count,
+        LAMBDA_MIN,
+        LAMBDA_MAX,
+    )
+    model_name = hash_args(*args)
+    if not cache_dir:
+        cache_dir = os.path.join(storage.cache_dir, 'models')
+
+    filename = f'{model_name}.npy'
+    model_path = os.path.join(cache_dir, filename)
+    logger.debug(f'{model_path=}')
+    return model_path
 
 
 def sigmoid(x: float) -> float:
@@ -29,8 +56,9 @@ def smoothstep(x: float) -> float:
 
 
 def decompose(a: np.ndarray, tolerance: float) -> tuple[np.ndarray, list]:
-    # lower-upper (LU) decomposition
-    # a = 3x3 matrix
+    """Return a lower-upper (LU) decomposition.
+    `a` is a 3x3 matrix
+    """
     n = a.shape[0]
     p = list(range(n + 1))
 
@@ -62,7 +90,7 @@ def decompose(a: np.ndarray, tolerance: float) -> tuple[np.ndarray, list]:
 
 
 def solve(a: np.ndarray, p: list, b: np.ndarray) -> np.ndarray:
-    # lower-upper (LU) solve
+    """Solve lower-upper (LU) decomposition."""
     n = a.shape[0]
     x = np.zeros(n)
 
@@ -106,7 +134,7 @@ def eval_residual(
 def eval_jacobian(
     coeffs: np.ndarray, xyz: np.ndarray, xyz_table: np.ndarray, whitepoint: np.ndarray
 ) -> np.ndarray:
-    # jacobian matrix
+    """Return the Jacobian Matrix."""
     coeffs_count = coeffs.shape[0]
     channel_count = xyz.shape[0]
     jacobian = np.zeros((coeffs_count, coeffs_count))
@@ -132,6 +160,7 @@ def gauss_newton(
     whitepoint: np.ndarray,
     iterations: int = 15,
 ) -> np.ndarray:
+    """Solve non-linear least squares problem with Gauss-Newton algorithm."""
     threshold = 1e-6
     for i in range(iterations):
         residual = eval_residual(coefficients, xyz, xyz_table, whitepoint)
@@ -161,6 +190,7 @@ def gauss_newton(
 
 
 def get_scale(resolution: int) -> tuple[float, ...]:
+    """Return a smooth interpolation between 0 and 1."""
     return tuple(
         smoothstep(smoothstep(k / (resolution - 1))) for k in range(resolution)
     )
@@ -171,8 +201,9 @@ def create_model(
     xyz_table: np.ndarray,
     whitepoint: np.ndarray,
 ) -> np.ndarray:
+    """Return a model of coefficients for three quadrilateral regions based on
+    Jakob 2019."""
     scale = get_scale(resolution)
-    # logger.debug(f'{scale=}')
 
     # channel, y, x, i?, coeffs
     data_shape = (3, resolution, resolution, resolution, 3)
@@ -246,6 +277,7 @@ def create_model(
 
 
 def trilinear_interpolation(xyz: np.ndarray, model: np.ndarray):
+    """Trilinear Interpolation given a model with 3 dimensions."""
     x, y, z = xyz
     model_resolution = model.shape[0]
     xyz0 = np.minimum(np.int32(xyz * (model_resolution - 1)), model_resolution - 2)
@@ -276,8 +308,9 @@ def trilinear_interpolation(xyz: np.ndarray, model: np.ndarray):
 
 
 def fetch(model: np.ndarray, resolution: int, xyz: np.ndarray) -> np.ndarray:
-    # returns three coefficients
-    # xyz must be 0..1
+    """Returns three coefficients from a model.
+    xyz must be 0..1.
+    """
 
     # resolution = model.shape[1]
 
@@ -339,7 +372,7 @@ def fetch(model: np.ndarray, resolution: int, xyz: np.ndarray) -> np.ndarray:
 
 
 def find_interval(values: list[float], x: float) -> int:
-    # Return the index that is closest to x in values.
+    """Return the index that is closest to x in values."""
     left = 0
     last_interval = len(values) - 2
     size = last_interval
@@ -362,40 +395,14 @@ def fma(a: float, b: float, c: float) -> float:
 
 
 def eval_precise(coefficients: np.ndarray, wavelength: float) -> float:
-    # get spectral value for lambda based on coefficients
+    """Get spectral value for lambda based on coefficients."""
     c = fma(coefficients[0], wavelength, coefficients[1])
     x = fma(c, wavelength, coefficients[2])
     y = 1 / np.sqrt(fma(x, x, 1))
     return fma(0.5 * x, y, 0.5)
 
 
-def get_cmfs(variation: str, lambdas: np.ndarray) -> np.ndarray:
-    cmfs_data = CMFS[variation]
-    cmfs_keys = np.array(list(cmfs_data.keys()))
-    cmfs_values = np.array(list(cmfs_data.values()))
-    cmfs = np.column_stack(
-        [np.interp(lambdas, cmfs_keys, cmfs_values[:, i]) for i in range(3)]
-    )
-    return cmfs
-
-
-def get_illuminant(standard_illuminant: str, lambdas: np.ndarray) -> np.ndarray:
-    illuminant_data = ILLUMINANTS_CIE[standard_illuminant]
-    illuminant_keys = np.array(list(illuminant_data.keys()))
-    illuminant_values = np.array(list(illuminant_data.values()))
-    illuminant = np.interp(lambdas, illuminant_keys, illuminant_values)
-    return illuminant
-
-
-@lru_cache(1)
-def get_whitepoint(standard_illuminant: str) -> np.ndarray:
-    chromaticity_coordinates = np.array(COORDS[standard_illuminant])
-    whitepoint = color.xyy_to_xyz(color.xy_to_xyy(chromaticity_coordinates))
-    return whitepoint
-
-
 class SpectralTask:
-
     @lru_cache(1)
     def update_xyz_table(
         self,
@@ -406,45 +413,24 @@ class SpectralTask:
         lambda_max: int,
     ) -> np.ndarray:
         lambdas = np.linspace(lambda_min, lambda_max, lambda_count)
-        cmfs = get_cmfs(cmfs_variation, lambdas)
-        illuminant = get_illuminant(standard_illuminant, lambdas)
+        cmfs = color.get_cmfs(cmfs_variation, lambdas)
+        illuminant = color.get_illuminant(standard_illuminant, lambdas)
         xyz_table = cmfs * illuminant[:, np.newaxis]
         xyz_table /= np.sum(xyz_table, axis=0)
         return xyz_table
 
-    @lru_cache(10)
-    def update_model_name(self, *args):
-        h = hashlib.md5()
-        for arg in args:
-            h.update(str.encode(str(arg)))
-        return h.hexdigest()
+    def cache_model(
+        self,
+        resolution: int,
+        model_path: str,
+        cmfs_variation: str,
+        standard_illuminant: str,
+        lambda_count: int,
+        lambda_min: int,
+        lambda_max: int,
+    ) -> None:
 
-    def cache_model(self, resolution: int, lambda_count: int) -> None:
-        standard_illuminant = 'D65'
-        cmfs_variation = 'CIE 2015 2 Degree Standard Observer'
-        lambda_min = LAMBDA_MIN
-        lambda_max = LAMBDA_MAX
-
-        model_args = (
-            resolution,
-            lambda_count,
-            lambda_min,
-            lambda_max,
-            standard_illuminant,
-            cmfs_variation,
-        )
-        logger.debug(f'{model_args=}')
-
-        model_name = self.update_model_name(model_args)
-        logger.debug(f'{model_name=}')
-
-        filename = f'{model_name}.npy'
-        model_path = os.path.join(
-            '/home/beat/dev/autochrome/autochrome/api/tasks', filename
-        )
-        logger.debug(f'{model_path=}')
-
-        whitepoint = get_whitepoint(standard_illuminant=standard_illuminant)
+        whitepoint = color.get_whitepoint(standard_illuminant=standard_illuminant)
         xyz_table = self.update_xyz_table(
             cmfs_variation=cmfs_variation,
             standard_illuminant=standard_illuminant,
@@ -455,11 +441,26 @@ class SpectralTask:
 
         logger.info(f'Caching model...')
         model = create_model(resolution, xyz_table, whitepoint)
+
+        cache_dir = os.path.dirname(model_path)
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
         np.save(model_path, model)
         logger.info(f'Model saved: {model_path}')
 
+    @timer
     def run(self, project: Project) -> None:
+        model_path = get_model_path(project)
+        standard_illuminant = 'D65'
+        cmfs_variation = 'CIE 2015 2 Degree Standard Observer'
+        lambda_min = LAMBDA_MIN
+        lambda_max = LAMBDA_MAX
         self.cache_model(
             resolution=project.emulsion.model_resolution,
+            model_path=model_path,
+            cmfs_variation=cmfs_variation,
+            standard_illuminant=standard_illuminant,
             lambda_count=project.emulsion.lambda_count,
+            lambda_min=lambda_min,
+            lambda_max=lambda_max,
         )

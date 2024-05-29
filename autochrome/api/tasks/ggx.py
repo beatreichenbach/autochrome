@@ -1,16 +1,11 @@
 import logging
-from functools import lru_cache
 
-import cv2
 import numpy as np
 import pyopencl as cl
 from PySide2 import QtCore
 
-from autochrome.api.data import Project, EngineError
-from autochrome.api.path import File
-from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
-from autochrome.api.tasks.spectral import normalize_image, un_normalize_image
-from autochrome.utils import ocio
+from autochrome.api.data import Project
+from autochrome.api.tasks.opencl import OpenCL, Image
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +18,7 @@ class GGXTask(OpenCL):
 
     def build(self, *args, **kwargs) -> None:
         self.source = ''
-        self.source += self.read_source_file('spec.cl')
+        self.source += self.read_source_file('ggx.cl')
 
         super().build()
 
@@ -69,13 +64,13 @@ class GGXTask(OpenCL):
 
     def run(self, project: Project) -> Image:
         light_position = (
-            project.ggx.light_position.x(),
-            project.ggx.light_position.y(),
+            project.halation.light_position.x(),
+            project.halation.light_position.y(),
         )
         image = self.render(
-            resolution=project.ggx.resolution,
-            roughness=project.ggx.roughness,
-            height=project.ggx.height,
+            resolution=project.halation.resolution,
+            roughness=project.halation.roughness,
+            height=project.halation.height,
             light_position=light_position,
         )
         return image

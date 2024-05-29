@@ -9,10 +9,13 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Any, Union
 
+import platformdirs
+
 from qt_extensions.typeutils import cast, basic
 
 import autochrome
 
+PACKAGE = autochrome.__name__
 
 logger = logging.getLogger(__name__)
 
@@ -62,32 +65,31 @@ class Storage(JSONStorage, metaclass=Singleton):
     def __init__(self) -> None:
         super().__init__()
 
-        # path
-        self._path = os.getenv('AUTOCHROME_PATH')
-        if self._path is None:
-            data_home = os.getenv('XDG_DATA_HOME', os.path.expanduser('~'))
-            self._path = os.path.join(data_home, autochrome.__name__)
-        logger.debug(f'Storage path: {self._path}')
+        self.config_dir = platformdirs.user_config_dir(autochrome.__name__)
+        self.cache_dir = platformdirs.user_cache_dir(autochrome.__name__)
+
+        if custom_path := os.getenv(f'{PACKAGE.upper()}_PATH'):
+            self.config_dir = custom_path
+
+        logger.debug(f'Config path: {self.config_dir}')
+        logger.debug(f'Cache path: {self.cache_dir}')
 
         # settings
-        self._settings_path = os.path.join(self._path, 'settings.json')
+        self._settings_path = os.path.join(self.config_dir, 'settings.json')
         self._settings = None
 
         # state
-        self._state_path = os.path.join(self._path, 'state.json')
+        self._state_path = os.path.join(self.config_dir, 'state.json')
         self._state = None
 
         # path variables
         self.path_vars = {
-            '$RES': os.path.join(self._path, 'resources'),
-            '$MODEL': os.path.join(self._path, 'resources', 'model'),
-            '$GLASS': os.path.join(self._path, 'resources', 'glass'),
-            '$APT': os.path.join(self._path, 'resources', 'aperture'),
-            '$PRESET': os.path.join(self._path, 'resources', 'preset'),
+            '$RES': os.path.join(self.config_dir, 'resources'),
+            '$CURVES': os.path.join(self.config_dir, 'resources', 'curves'),
         }
 
         # resources
-        # self.init_resources()
+        self.init_resources()
 
     @property
     def settings(self) -> Settings:
@@ -147,7 +149,7 @@ class Storage(JSONStorage, metaclass=Singleton):
         resource_path = self.path_vars['$RES']
         if os.path.exists(resource_path):
             return
-        package_resource_path = str(files('autochrome').joinpath('resources'))
+        package_resource_path = str(files(PACKAGE).joinpath('resources'))
         shutil.copytree(package_resource_path, resource_path)
 
     def save_settings(self) -> bool:

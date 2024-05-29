@@ -1,3 +1,4 @@
+import json
 import logging
 from functools import lru_cache
 
@@ -8,22 +9,17 @@ from PySide2 import QtCore
 
 from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
-from autochrome.api.tasks.jakob import get_scale, get_illuminant, get_cmfs
+from autochrome.api.tasks import jakob
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
-from autochrome.resources.curves.kodak_ektachrome_100 import SENSITIVITY, DYE_DENSITY
-from autochrome.resources.curves.kodak_portra_800 import SENSITIVITY, DYE_DENSITY
-from autochrome.utils import ocio
+from autochrome.storage import Storage
+from autochrome.utils import ocio, color
 from autochrome.utils.timing import timer
-
-logger = logging.getLogger(__name__)
-
 
 LAMBDA_MIN = 390
 LAMBDA_MAX = 830
-COEFFICIENTS_COUNT = 3
 
-# TODO: remove
-LAMBDA_COUNT = 21
+logger = logging.getLogger(__name__)
+storage = Storage()
 
 
 def smoothstep(x: float) -> float:
@@ -45,16 +41,17 @@ class EmulsionTask(OpenCL):
     def __init__(self, queue) -> None:
         super().__init__(queue)
         self.kernel = None
+        self._lambda_count = 0
         self.build()
 
     def build(self, *args, **kwargs) -> None:
         self.source = (
-            f'#define LAMBDA_COUNT {LAMBDA_COUNT}\n'
-            f'#define COEFFICIENTS_COUNT {COEFFICIENTS_COUNT}\n'
+            f'#define LAMBDA_COUNT {self._lambda_count}\n'
+            f'#define COEFFICIENTS_COUNT {jakob.COEFFICIENTS_COUNT}\n'
         )
         self.source += self.read_source_file('emulsion.cl')
 
-        super().build()
+        super().build(*args, **kwargs)
 
         self.kernel = cl.Kernel(self.program, 'emulsion_layers')
 
@@ -103,7 +100,7 @@ class EmulsionTask(OpenCL):
 
     @lru_cache(1)
     def update_cmfs(self, variation: str, lambdas: Buffer) -> Buffer:
-        cmfs = get_cmfs(variation, lambdas.array)
+        cmfs = color.get_cmfs(variation, lambdas.array)
         cmfs_cl = np.zeros(cmfs.shape[0], cl.cltypes.float4)
         for i, xyz in enumerate(cmfs):
             for j in range(3):
@@ -113,7 +110,7 @@ class EmulsionTask(OpenCL):
 
     @lru_cache(1)
     def update_illuminant(self, standard_illuminant: str, lambdas: Buffer) -> Buffer:
-        illuminant = get_illuminant(standard_illuminant, lambdas.array)
+        illuminant = color.get_illuminant(standard_illuminant, lambdas.array)
         illuminant_cl = illuminant.astype(cl.cltypes.float)
         args = (standard_illuminant, lambdas)
         buffer = Buffer(self.context, array=illuminant_cl, args=args)
@@ -121,38 +118,28 @@ class EmulsionTask(OpenCL):
 
     @lru_cache(1)
     def update_scale(self, resolution: int) -> Buffer:
-        scale = np.array(get_scale(resolution), np.float32)
+        scale = np.array(jakob.get_scale(resolution), np.float32)
         scale_cl = scale.astype(cl.cltypes.float)
         buffer = Buffer(self.context, array=scale_cl, args=resolution)
         return buffer
 
     @lru_cache(1)
     def update_spectral_sensitivity(self, curves_file: File, lambdas: Buffer) -> Buffer:
-        sensitivity_data = SENSITIVITY
+        with open(str(curves_file), 'r') as f:
+            sensitivity_data = json.load(f)
+
+        lambda_count = lambdas.shape[0]
+
         sensitivity_keys = np.array(list(sensitivity_data.keys()))
         sensitivity_values = np.array(list(sensitivity_data.values()))
-        sensitivity = np.zeros(lambdas.shape, cl.cltypes.float4)
+        sensitivity = np.zeros(lambda_count, cl.cltypes.float4)
         for i in range(3):
             values = np.interp(
                 lambdas.array, sensitivity_keys, sensitivity_values[:, i]
             )
-            for j in range(LAMBDA_COUNT):
+            for j in range(lambda_count):
                 sensitivity[j][2 - i] = values[j]
         buffer = Buffer(self.context, array=sensitivity, args=(lambdas, curves_file))
-        return buffer
-
-    @lru_cache(1)
-    def update_spectral_density(self, lambdas: Buffer) -> Buffer:
-        density_data = DYE_DENSITY
-        density_keys = np.array(list(density_data.keys()))
-        density_values = np.array(list(density_data.values()))
-
-        density = np.zeros(LAMBDA_COUNT, cl.cltypes.float)
-        values = np.interp(lambdas.array, density_keys, density_values)
-        for i in range(LAMBDA_COUNT):
-            density[i] = values[i]
-
-        buffer = Buffer(self.context, array=density, args=lambdas)
         return buffer
 
     @lru_cache(1)
@@ -200,7 +187,10 @@ class EmulsionTask(OpenCL):
         curves_file: File,
         lambda_count: int,
     ) -> tuple[Image, ...]:
-        if self.rebuild:
+        lambda_count_changed = lambda_count != self._lambda_count
+        if lambda_count_changed:
+            self._lambda_count = lambda_count
+        if self.rebuild or lambda_count_changed:
             self.build()
 
         standard_illuminant = 'D65'
@@ -260,17 +250,13 @@ class EmulsionTask(OpenCL):
 
     def run(self, project: Project) -> tuple[Image, ...]:
         image_file = File(project.input.image_path)
-        model_file = File(
-            '/home/beat/dev/autochrome/autochrome/api/tasks/afef8e3dd5781a7df338b7f65ffcc0ad.npy'
-        )
-        curves_file = File(
-            '/home/beat/dev/autochrome/autochrome/resources/curves/kodak_ektachrome_100.json'
-        )
+        model_path = jakob.get_model_path(project)
+        curves_file = File(project.emulsion.curves_file)
         spectral_images = self.spectral_images(
             image_file=image_file,
             input_colorspace=project.input.colorspace,
             resolution=project.render.resolution,
-            model_file=model_file,
+            model_path=model_path,
             curves_file=curves_file,
             lambda_count=project.emulsion.lambda_count,
         )

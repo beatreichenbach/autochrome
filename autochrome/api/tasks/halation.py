@@ -23,8 +23,7 @@ class HalationTask(OpenCL):
         self.build()
 
     def build(self, *args, **kwargs) -> None:
-        self.source = ''
-        self.source += self.read_source_file('halation.cl')
+        self.source = self.read_source_file('halation.cl')
 
         super().build()
 

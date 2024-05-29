@@ -14,21 +14,12 @@ CL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'cl'))
 
 LAMBDA_MIN = 390
 LAMBDA_MAX = 730
-LAMBDA_MID = (LAMBDA_MIN + LAMBDA_MAX) / 2
-
-# intersection_dtype = np.dtype(
-#     [
-#         ('pos', cl.cltypes.float3),
-#         ('normal', cl.cltypes.float3),
-#         ('incident', cl.cltypes.float),
-#         ('hit', cl.cltypes.int),
-#     ]
-# )
 
 
 class MemoryObject:
-    # This object transfers data between host and devices, it stores the args used to
-    # generate the data to make the object hashable
+    """This object transfers data between host and devices
+    It stores the args used to generate the data to make the object hashable
+    """
 
     def __init__(
         self,
@@ -209,7 +200,7 @@ class OpenCL:
         self.program = cl.Program(self.context, self.source).build(*args, **kwargs)
 
     def register_dtype(self, name, dtype):
-        # register dtypes with device so that memory is allocated correctly
+        """Register dtypes with device so that memory is allocated correctly."""
         device = self.queue.device
         dtype, c_decl = cl.tools.match_dtype_to_c_struct(device, name, dtype)
         self.dtypes[name] = dtype
