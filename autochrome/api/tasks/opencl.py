@@ -16,6 +16,7 @@ LAMBDA_MIN = 390
 LAMBDA_MAX = 730
 
 
+# TODO: turn shape into a property or function.
 class MemoryObject:
     """This object transfers data between host and devices
     It stores the args used to generate the data to make the object hashable

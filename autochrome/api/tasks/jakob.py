@@ -29,10 +29,11 @@ def hash_args(*args) -> str:
 @lru_cache(10)
 def get_model_path(project: Project, cache_dir: str = '') -> str:
     args = (
-        project.render.resolution,
+        project.emulsion.wavelength_count,
+        project.emulsion.model_resolution,
+        project.emulsion.lambda_count,
         project.emulsion.standard_illuminant,
         project.emulsion.cmfs_variation,
-        project.emulsion.lambda_count,
         LAMBDA_MIN,
         LAMBDA_MAX,
     )
@@ -451,15 +452,17 @@ class SpectralTask:
     @timer
     def run(self, project: Project) -> None:
         model_path = get_model_path(project)
-        standard_illuminant = 'D65'
-        cmfs_variation = 'CIE 2015 2 Degree Standard Observer'
+        if os.path.exists(model_path):
+            logger.debug('Model already exists.')
+            return
+
         lambda_min = LAMBDA_MIN
         lambda_max = LAMBDA_MAX
         self.cache_model(
             resolution=project.emulsion.model_resolution,
             model_path=model_path,
-            cmfs_variation=cmfs_variation,
-            standard_illuminant=standard_illuminant,
+            cmfs_variation=project.emulsion.cmfs_variation,
+            standard_illuminant=project.emulsion.standard_illuminant,
             lambda_count=project.emulsion.lambda_count,
             lambda_min=lambda_min,
             lambda_max=lambda_max,

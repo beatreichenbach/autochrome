@@ -1,4 +1,5 @@
 import logging
+from functools import lru_cache
 
 import numpy as np
 import pyopencl as cl
@@ -6,6 +7,7 @@ from PySide2 import QtCore
 
 from autochrome.api.data import Project
 from autochrome.api.tasks.opencl import OpenCL, Image
+from autochrome.utils.timing import timer
 
 logger = logging.getLogger(__name__)
 
@@ -17,39 +19,30 @@ class GGXTask(OpenCL):
         self.build()
 
     def build(self, *args, **kwargs) -> None:
-        self.source = ''
-        self.source += self.read_source_file('ggx.cl')
+        self.source = self.read_source_file('ggx.cl')
 
         super().build()
 
         self.kernel = cl.Kernel(self.program, 'BRDF')
 
+    @lru_cache(1)
     def render(
         self,
         resolution: QtCore.QSize,
         roughness: float,
         height: float,
-        light_position: tuple[float, float],
     ) -> Image:
         if self.rebuild:
             self.build()
 
         # create output buffer
         ggx = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
-        ggx.args = (
-            resolution,
-            roughness,
-            height,
-            light_position,
-        )
-
-        light_position_cl = np.array(light_position, dtype=cl.cltypes.float2)
+        ggx.args = (resolution, roughness, height)
 
         # run program
         self.kernel.set_arg(0, ggx.image)
         self.kernel.set_arg(1, np.float32(roughness))
         self.kernel.set_arg(2, np.float32(height))
-        self.kernel.set_arg(3, light_position_cl)
 
         w, h = resolution.width(), resolution.height()
         global_work_size = (w, h)
@@ -62,15 +55,11 @@ class GGXTask(OpenCL):
 
         return ggx
 
+    @timer
     def run(self, project: Project) -> Image:
-        light_position = (
-            project.halation.light_position.x(),
-            project.halation.light_position.y(),
-        )
         image = self.render(
             resolution=project.halation.resolution,
             roughness=project.halation.roughness,
             height=project.halation.height,
-            light_position=light_position,
         )
         return image

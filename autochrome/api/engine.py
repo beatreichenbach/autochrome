@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections import OrderedDict
-from typing import Callable
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -12,19 +11,29 @@ from PySide2 import QtCore
 from pyopencl import tools
 
 from autochrome.api.data import Project, RenderElement, RenderImage, EngineError
+from autochrome.api.path import File
 from autochrome.api.tasks import opencl
+from autochrome.api.tasks.emulsion import EmulsionTask
 from autochrome.api.tasks.ggx import GGXTask
 from autochrome.api.tasks.grain import GrainTask
 from autochrome.api.tasks.halation import HalationTask
+from autochrome.api.tasks.jakob import SpectralTask
 from autochrome.api.tasks.opencl import Image
-from autochrome.api.tasks.spectral import EmulsionTask
 from autochrome.storage import Storage
-
 from autochrome.utils import ocio
 from autochrome.utils.timing import timer
 
 logger = logging.getLogger(__name__)
 storage = Storage()
+
+
+@lru_cache(3)
+def apply_colorspace(image: Image, src_name: str) -> Image:
+    array = image.array.copy()
+    processor = ocio.colorspace_processor(src_name=src_name)
+    processor.applyRGBA(array)
+    image = Image(image.context, array=array, args=(image, src_name))
+    return image
 
 
 class Engine(QtCore.QObject):
@@ -35,7 +44,7 @@ class Engine(QtCore.QObject):
         super().__init__(parent)
 
         self.queue = opencl.command_queue(device)
-        logger.debug(f'engine initialized on device: {self.queue.device.name}')
+        logger.debug(f'Engine initialized on device: {self.queue.device.name}')
 
         self._emit_cache = {}
         self._elements = []
@@ -43,13 +52,18 @@ class Engine(QtCore.QObject):
         self._init_tasks()
 
     def _init_renderers(self) -> None:
-        self.renderers: dict[RenderElement, Callable] = OrderedDict()
-        self.renderers[RenderElement.EMULSION] = self.emulsion
-        self.renderers[RenderElement.GGX] = self.ggx
-        self.renderers[RenderElement.HALATION] = self.halation
-        self.renderers[RenderElement.GRAIN] = self.grain
+        self.renderers = {
+            RenderElement.INPUT: self.source,
+            RenderElement.EMULSION_R: self.emulsion,
+            RenderElement.EMULSION_G: self.emulsion,
+            RenderElement.EMULSION_B: self.emulsion,
+            RenderElement.KERNEL: self.ggx,
+            RenderElement.HALATION: self.halation,
+            RenderElement.GRAIN: self.grain,
+        }
 
     def _init_tasks(self) -> None:
+        self.spectral_task = SpectralTask()
         self.emulsion_task = EmulsionTask(self.queue)
         self.ggx_task = GGXTask(self.queue)
         self.halation_task = HalationTask(self.queue)
@@ -58,34 +72,69 @@ class Engine(QtCore.QObject):
     def elements(self) -> list[RenderElement]:
         return self._elements
 
+    def source(self, project: Project) -> Image:
+        image_file = File(project.input.image_path)
+        resolutin = (
+            project.render.resolution if project.render.force_resolution else None
+        )
+        image = self.emulsion_task.load_file(image_file, resolutin)
+        # TODO: needs colorspace
+        return image
+
     def emulsion(self, project: Project) -> Image:
-        images = self.emulsion_task.run(project)
+        self.spectral_task.run(project)
+        spectral_images = self.emulsion_task.run(project)
 
-        image = images[2]
+        # TODO: colorspace should be stored in Image
+        element = next(
+            (e for e in self._elements if e.name.startswith('EMULSION')),
+            RenderElement.EMULSION_R,
+        )
 
-        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-        # processor = ocio.colorspace_processor(src_name='Utility - XYZ - D60')
-        processor.applyRGBA(image.array)
+        if element == RenderElement.EMULSION_B:
+            emulsion = spectral_images[2]
+        elif element == RenderElement.EMULSION_G:
+            emulsion = spectral_images[1]
+        else:
+            emulsion = spectral_images[0]
 
-        return image
+        # src_name = 'CIE-XYZ-D65'
+        src_name = 'Utility - XYZ - D60'
+        image = apply_colorspace(emulsion, src_name)
 
-    def grain(self, project: Project) -> Image:
-        spec = self.ggx_task.run(project)
-        spectrals = self.spectral_task.run(project)
-        image = self.grain_task.run(project, spectrals, spec)
-        return image
-
-    def halation(self, project: Project) -> Image:
-        spec = self.ggx_task.run(project)
-        spectrals = self.spectral_task.run(project)
-        image = self.halation_task.run(project, spectrals[0], spec)
-        processor = ocio.colorspace_processor(src_name='CIE-XYZ-D65')
-        # processor = ocio.colorspace_processor(src_name='Utility - XYZ - D60')
-        processor.applyRGBA(image.array)
         return image
 
     def ggx(self, project: Project) -> Image:
         image = self.ggx_task.run(project)
+        return image
+
+    def halation(self, project: Project) -> Image:
+        self.spectral_task.run(project)
+        spectral_images = self.emulsion_task.run(project)
+        kernel = self.ggx_task.run(project)
+        halation = self.halation_task.run(project, spectral_images[0], kernel)
+
+        # TODO: colorspace should be stored in Image
+        # src_name = 'CIE-XYZ-D65'
+        src_name = 'Utility - XYZ - D60'
+        image = apply_colorspace(halation, src_name)
+
+        return image
+
+    def grain(self, project: Project) -> Image:
+        self.spectral_task.run(project)
+        spectral_images = self.emulsion_task.run(project)
+        kernel = self.ggx_task.run(project)
+        halation = self.halation_task.run(project, spectral_images[0], kernel)
+        spectral_images = (halation, spectral_images[1], spectral_images[2])
+
+        grain = self.grain_task.run(project, spectral_images)
+
+        # TODO: colorspace should be stored in Image
+        # src_name = 'CIE-XYZ-D65'
+        src_name = 'Utility - XYZ - D60'
+        image = apply_colorspace(grain, src_name)
+
         return image
 
     @timer

@@ -154,7 +154,7 @@ __kernel void emulsion_layers(
 
     float4 xyz = read_imagef(xyz_image, SAMPLER_ABS, uv);
 
-    if (xyz.x < EPSILON || xyz.y < EPSILON || xyz.z < EPSILON) {
+    if (xyz.x < EPSILON && xyz.y < EPSILON && xyz.z < EPSILON) {
         write_imagef(spectral_r, uv, (float4) 0);
         write_imagef(spectral_g, uv, (float4) 0);
         write_imagef(spectral_b, uv, (float4) 0);
@@ -189,8 +189,8 @@ __kernel void emulsion_layers(
     integral.w = 1;
 
     red_layer /= integral;
-    blue_layer /= integral;
     green_layer /= integral;
+    blue_layer /= integral;
     
     write_imagef(spectral_r, uv, red_layer);
     write_imagef(spectral_g, uv, green_layer);

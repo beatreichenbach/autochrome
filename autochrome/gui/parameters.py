@@ -18,7 +18,7 @@ from qt_extensions.parameters import (
     SizeParameter,
     StringParameter,
 )
-from qt_extensions.parameters.widgets import MultiFloatParameter
+from qt_extensions.parameters.widgets import MultiFloatParameter, BoolParameter
 from qt_extensions.typeutils import cast, basic
 
 
@@ -91,7 +91,7 @@ class ProjectEditor(ParameterEditor):
         parm.set_tooltip('Colorspace from the OCIO config.\nFor example: ACES - ACEScg')
         input_group.add_parameter(parm)
 
-        # spectral
+        # emulsion
         box = self.add_group('emulsion')
         box.set_box_style(ParameterBox.SIMPLE)
         box.set_collapsible(False)
@@ -105,6 +105,20 @@ class ProjectEditor(ParameterEditor):
         parm = IntParameter(name='model_resolution')
         parm.set_line_min(2)
         parm.set_slider_visible(False)
+        spectral_group.add_parameter(parm)
+
+        parm = IntParameter(name='lambda_count')
+        parm.set_line_min(2)
+        parm.set_slider_visible(False)
+        spectral_group.add_parameter(parm)
+
+        parm = PathParameter(name='curves_file')
+        spectral_group.add_parameter(parm)
+
+        parm = StringParameter(name='standard_illuminant')
+        spectral_group.add_parameter(parm)
+
+        parm = StringParameter(name='cmfs_variation')
         spectral_group.add_parameter(parm)
 
         # halation
@@ -124,22 +138,23 @@ class ProjectEditor(ParameterEditor):
         parm.set_slider_min(0)
         ggx_group.add_parameter(parm)
 
-        parm = PointFParameter(name='light_position')
-        ggx_group.add_parameter(parm)
-
         parm = SizeParameter(name='resolution')
         parm.set_slider_visible(False)
-        parm.set_keep_ratio(False)
         ggx_group.add_parameter(parm)
 
-        parm = PointFParameter(name='mask')
+        parm = FloatParameter(name='threshold')
         ggx_group.add_parameter(parm)
 
         parm = FloatParameter(name='amount')
         parm.set_line_min(0)
-        parm.set_line_max(1)
         parm.set_slider_min(0)
         parm.set_slider_max(1)
+        ggx_group.add_parameter(parm)
+
+        parm = BoolParameter(name='mask_only')
+        ggx_group.add_parameter(parm)
+
+        parm = BoolParameter(name='halation_only')
         ggx_group.add_parameter(parm)
 
         # grain
@@ -199,13 +214,16 @@ class ProjectEditor(ParameterEditor):
         box.set_collapsible(False)
         render_group = box.form
 
+        parm = BoolParameter('force_resolution')
+        render_group.add_parameter(parm)
+
         parm = SizeParameter(name='resolution')
         parm.set_slider_visible(False)
         parm.set_keep_ratio(False)
         render_group.add_parameter(parm)
 
         parm = StringParameter('device')
-        input_group.add_parameter(parm)
+        render_group.add_parameter(parm)
 
         # output
         box = self.add_group('output')

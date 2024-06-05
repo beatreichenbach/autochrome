@@ -534,5 +534,10 @@ if __name__ == '__main__':
     os.environ['OCIO'] = (
         '/home/beat/Downloads/cg-config-v2.1.0_aces-v1.3_ocio-v2.3.ocio'
     )
+    os.environ['OCIO'] = (
+        '/home/beat/Downloads/OpenColorIO-Config-ACES-1.2/aces_1.2/config.ocio'
+    )
     os.environ['OCIO_INACTIVE_COLORSPACES'] = ''
+    logging.getLogger('pyopencl').setLevel(logging.WARNING)
+    logging.getLogger('pytools').setLevel(logging.WARNING)
     exec_()

@@ -31,14 +31,13 @@ float Fd_Lambert() {
 __kernel void BRDF(
     write_only image2d_t output,
     float perceptualRoughness,
-    float height,
-    float2 light_position
+    float height
 ) {
     int2 p;
     p.x = get_global_id(0);
     p.y = get_global_id(1);
 
-    int2 size = (int2);
+    int2 size;
     size.x = get_global_size(0);
     size.y = get_global_size(1);
 
@@ -52,7 +51,7 @@ __kernel void BRDF(
 
 	float3 camera_position = (float3) (0.5f, height, 0.5f);
 
-	float3 light_position3 = (float3) (light_position.x, 1, light_position.y);
+	float3 light_position3 = (float3) (0.5f, 1.0f, 0.5f);
 
 	float3 light_dir = normalize(light_position3 - position);
 	float3 view_dir = normalize(camera_position - position);

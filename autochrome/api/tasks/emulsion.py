@@ -7,7 +7,7 @@ import numpy as np
 import pyopencl as cl
 from PySide2 import QtCore
 
-from autochrome.api.data import Project, EngineError
+from autochrome.api.data import Project, EngineError, RenderElement
 from autochrome.api.path import File
 from autochrome.api.tasks import jakob
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
@@ -55,8 +55,8 @@ class EmulsionTask(OpenCL):
 
         self.kernel = cl.Kernel(self.program, 'emulsion_layers')
 
-    # @lru_cache(1)
-    def load_file(self, file: File, resolution: QtCore.QSize) -> Image:
+    @lru_cache(1)
+    def load_file(self, file: File, resolution: QtCore.QSize | None = None) -> Image:
         # load array
         filename = str(file)
         try:
@@ -72,7 +72,8 @@ class EmulsionTask(OpenCL):
         array = np.float32(array)
 
         # resize array
-        array = cv2.resize(array, (resolution.width(), resolution.height()))
+        if resolution:
+            array = cv2.resize(array, (resolution.width(), resolution.height()))
 
         array = np.dstack((array, np.zeros(array.shape[:2], np.float32)))
 
@@ -81,11 +82,10 @@ class EmulsionTask(OpenCL):
         return image
 
     @lru_cache(1)
-    def update_model(self, model_file: File) -> Buffer:
-        model_path = str(model_file)
+    def update_model(self, model_path: str) -> Buffer:
         model = np.load(model_path)
         model_cl = np.ravel(model).astype(cl.cltypes.float)
-        buffer = Buffer(self.context, array=model_cl, args=model_file)
+        buffer = Buffer(self.context, array=model_cl, args=model_path)
         return buffer
 
     @lru_cache(1)
@@ -130,7 +130,7 @@ class EmulsionTask(OpenCL):
 
         lambda_count = lambdas.shape[0]
 
-        sensitivity_keys = np.array(list(sensitivity_data.keys()))
+        sensitivity_keys = np.array(list(map(int, sensitivity_data.keys())))
         sensitivity_values = np.array(list(sensitivity_data.values()))
         sensitivity = np.zeros(lambda_count, cl.cltypes.float4)
         for i in range(3):
@@ -143,47 +143,46 @@ class EmulsionTask(OpenCL):
         return buffer
 
     @lru_cache(1)
-    def update_test_pattern(self, resolution: int) -> Buffer:
-        space = np.linspace(0, 1, resolution)
-        pattern_3d = np.stack(np.meshgrid(space, space, space), axis=3)
-
-        # size = int(np.ceil(np.sqrt(resolution**3)))
-        shape = (resolution, resolution**2, 3)
-        pattern_2d = pattern_3d.flatten()
-        pattern_2d.resize(shape, refcheck=False)
-
-        pattern = Buffer(context=self.context, array=pattern_2d, args=resolution)
-        return pattern
-
-    @lru_cache(1)
     def update_xyz_image(
-        self, image_file: File, input_colorspace: str, resolution: QtCore.QSize
+        self,
+        image_file: File,
+        input_colorspace: str,
+        resolution: QtCore.QSize | None = None,
     ) -> Image:
         image = self.load_file(image_file, resolution)
 
-        # NOTE: To ensure values are always between 0 and 1 convert into sRGB space
-        processor = ocio.colorspace_processor(
-            src_name=input_colorspace, dst_name='Output - sRGB'
-        )
+        image_array = image.array.copy()
 
         # TODO: handle no processors (WARNING?)
-        if processor:
-            processor.applyRGBA(image.array)
+        # NOTE: To ensure values are always between 0 and 1 convert into sRGB space
+        # dst_name = 'sRGB - Display'
+        dst_name = 'Output - sRGB'
+        processor = ocio.colorspace_processor(
+            src_name=input_colorspace, dst_name=dst_name
+        )
+        processor.applyRGBA(image_array)
 
-        processor = ocio.colorspace_processor(dst_name='Utility - XYZ - D60')
-        # processor = ocio.colorspace_processor(dst_name='CIE-XYZ-D65')
-        if processor:
-            processor.applyRGBA(image.array)
+        # dst_name='CIE-XYZ-D65'
+        dst_name = 'Utility - XYZ - D60'
+        processor = ocio.colorspace_processor(dst_name=dst_name)
+        processor.applyRGBA(image_array)
 
-        return image
+        xyz_image = Image(
+            self.context,
+            array=image_array,
+            args=(image_file, input_colorspace, resolution),
+        )
 
-    @timer
+        return xyz_image
+
+    @lru_cache(1)
     def spectral_images(
         self,
         image_file: File,
         input_colorspace: str,
         resolution: QtCore.QSize,
-        model_file: File,
+        force_resolution: bool,
+        model_path: str,
         curves_file: File,
         lambda_count: int,
     ) -> tuple[Image, ...]:
@@ -198,13 +197,20 @@ class EmulsionTask(OpenCL):
         lambda_min = LAMBDA_MIN
         lambda_max = LAMBDA_MAX
 
+        if not force_resolution:
+            resolution = None
+
         xyz_image = self.update_xyz_image(image_file, input_colorspace, resolution)
+        if resolution is None:
+            resolution = QtCore.QSize(
+                xyz_image.array.shape[1], xyz_image.array.shape[0]
+            )
         # xyz_image.clear_image()
 
         # min_val, max_val = normalize_image(image)
         # logger.debug(f'{min_val=}, {max_val=}')
 
-        model = self.update_model(model_file)
+        model = self.update_model(model_path)
         model_resolution = 16
 
         scale = self.update_scale(model_resolution)
@@ -219,6 +225,7 @@ class EmulsionTask(OpenCL):
             image = self.update_image(resolution, flags=cl.mem_flags.READ_WRITE)
             image.args = (xyz_image, model, curves_file)
             spectral_images.append(image)
+
             # image.clear_image()
         spectral_images = tuple(spectral_images)
 
@@ -248,14 +255,17 @@ class EmulsionTask(OpenCL):
 
         return spectral_images
 
+    @timer
     def run(self, project: Project) -> tuple[Image, ...]:
         image_file = File(project.input.image_path)
         model_path = jakob.get_model_path(project)
-        curves_file = File(project.emulsion.curves_file)
+        curves_path = storage.decode_path(project.emulsion.curves_file)
+        curves_file = File(curves_path)
         spectral_images = self.spectral_images(
             image_file=image_file,
             input_colorspace=project.input.colorspace,
             resolution=project.render.resolution,
+            force_resolution=project.render.force_resolution,
             model_path=model_path,
             curves_file=curves_file,
             lambda_count=project.emulsion.lambda_count,

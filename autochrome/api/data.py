@@ -14,17 +14,13 @@ class EngineError(ValueError):
 
 @enum.unique
 class RenderElement(enum.Enum):
-    EMULSION = enum.auto()
-    GGX = enum.auto()
+    INPUT = enum.auto()
+    EMULSION_R = enum.auto()
+    EMULSION_G = enum.auto()
+    EMULSION_B = enum.auto()
+    KERNEL = enum.auto()
     HALATION = enum.auto()
     GRAIN = enum.auto()
-
-
-@enum.unique
-class EmulsionLayer(enum.Enum):
-    red = enum.auto()
-    green = enum.auto()
-    blue = enum.auto()
 
 
 @hashable_dataclass
@@ -35,10 +31,8 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = (
-        '/home/beat/dev/autochrome/data/stocksnap/StockSnap_JDXWHY8CIN.jpg'
-    )
-    colorspace: str = 'Output - sRGB'
+    image_path: str = '/home/beat/Downloads/ferrari_hamilton_live_v02.exr'
+    colorspace: str = 'ACES - ACEScg'
 
 
 @hashable_dataclass
@@ -46,7 +40,6 @@ class Emulsion:
     wavelength_count: int = 21
     model_resolution: int = 16
     lambda_count: int = 21
-    isolate_layer: EmulsionLayer | None = None
     curves_file: str = '$CURVES/kodak_ektachrome_100.json'
     standard_illuminant: str = 'D65'
     cmfs_variation: str = 'CIE 2015 2 Degree Standard Observer'
@@ -56,11 +49,11 @@ class Emulsion:
 class Halation:
     roughness: float = 0.2
     height: float = 1.0
-    light_position: QtCore.QPointF = deep_field(QtCore.QPointF(0.5, 0.5))
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(256, 256))
-    mask: QtCore.QPointF = deep_field(QtCore.QPointF(0.2, 0.4))
-    amount: float = 0.5
-    effect_only: bool = False
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(64, 64))
+    threshold: float = 0.2
+    amount: float = 1.0
+    mask_only: bool = False
+    halation_only: bool = False
 
 
 @hashable_dataclass
@@ -68,7 +61,7 @@ class Grain:
     samples: int = 1024
     blur_sigma: float = 0.5
     seed_offset: int = 0
-    grain_mu: float = 0.1
+    grain_mu: float = 0.07
     grain_sigma: float = 0.0
     lift: float = 0.000
 
@@ -76,7 +69,8 @@ class Grain:
 @hashable_dataclass
 class Render:
     # renderer
-    resolution: QtCore.QSize = deep_field(QtCore.QSize(512, 512))
+    force_resolution: bool = True
+    resolution: QtCore.QSize = deep_field(QtCore.QSize(1920, 1080))
 
     # system
     device: str = ''
@@ -86,8 +80,8 @@ class Render:
 class Output:
     write: bool = False
     element: RenderElement = RenderElement.GRAIN
-    path: str = '/home/beat/dev/autochrome/data/stocksnap/StockSnap_JDXWHY8CIN_0.1.exr'
-    colorspace: str = 'ACEScg'
+    path: str = '/home/beat/Downloads/ferrari_hamilton_live_v02_grain_0.07.exr'
+    colorspace: str = 'ACES - ACEScg'
     frame: int = 0
 
 
