@@ -1,7 +1,7 @@
 [project]
 name = "autochrome"
 description = "Filmic Emulsion for VFX"
-version = "0.0.1"
+version = "0.1.0"
 authors = [
     {name = "Beat Reichenbach"}
 ]
@@ -39,7 +39,9 @@ log_cli = true
 log_cli_level = "DEBUG"
 
 [tool.semantic_release]
-version_toml = "pyproject.toml:project.version"
+version_toml = [
+    "pyproject.toml:project.version"
+]
 version_variables = [
     "autochrome/__init__.py:__version__"
 ]
