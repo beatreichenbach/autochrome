@@ -25,7 +25,7 @@ def colorspace_names() -> dict:
         return names
 
     for name in config.getColorSpaceNames():
-        logger.debug(f'colorspace_name: {name}')
+        # logger.debug(f'{name=}')
         max_split = 1
         if name.startswith('Input'):
             max_split = 2

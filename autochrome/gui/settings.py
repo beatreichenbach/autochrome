@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import logging
 
 from PySide2 import QtWidgets, QtGui, QtCore
 
+from autochrome.storage import Storage, Settings
+from autochrome.utils import ocio
 from qt_extensions.button import Button
 from qt_extensions.messagebox import MessageBox
 from qt_extensions.parameters import (
@@ -12,11 +15,7 @@ from qt_extensions.parameters import (
     ParameterEditor,
     StringParameter,
 )
-from qt_extensions.box import CollapsibleBox
 from qt_extensions.typeutils import basic, cast
-
-from autochrome.storage import Storage, Settings
-from autochrome.utils import ocio
 
 logger = logging.getLogger(__name__)
 storage = Storage()
@@ -133,7 +132,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.button_box.hide()
 
     def check_save(self) -> bool:
-        # returns true if program can continue, false if action should be cancelled
+        """Return True if program can continue, False if action should be cancelled."""
 
         settings = self.editor.settings()
         if storage.settings == settings:

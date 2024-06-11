@@ -14,17 +14,12 @@ from qt_extensions.parameters import (
     ParameterEditor,
     ParameterWidget,
     PathParameter,
-    PointFParameter,
     SizeParameter,
     StringParameter,
+    MultiFloatParameter,
+    BoolParameter,
 )
-from qt_extensions.parameters.widgets import MultiFloatParameter, BoolParameter
 from qt_extensions.typeutils import cast, basic
-
-
-# from autochrome.storage import Storage
-
-# storage = Storage()
 
 
 @dataclasses.dataclass
@@ -79,8 +74,7 @@ class ProjectEditor(ParameterEditor):
     def _init(self) -> None:
         # input
         box = self.add_group('input')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         input_group = box.form
 
         parm = PathParameter(name='image_path')
@@ -93,8 +87,7 @@ class ProjectEditor(ParameterEditor):
 
         # emulsion
         box = self.add_group('emulsion')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         spectral_group = box.form
 
         parm = IntParameter(name='wavelength_count')
@@ -123,8 +116,7 @@ class ProjectEditor(ParameterEditor):
 
         # halation
         box = self.add_group('halation')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         ggx_group = box.form
 
         parm = FloatParameter(name='roughness')
@@ -159,8 +151,7 @@ class ProjectEditor(ParameterEditor):
 
         # grain
         box = self.add_group('grain')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         grain_group = box.form
 
         box = grain_group.add_group('render')
@@ -210,8 +201,7 @@ class ProjectEditor(ParameterEditor):
 
         # render
         box = self.add_group('render')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         render_group = box.form
 
         parm = BoolParameter('force_resolution')
@@ -227,8 +217,7 @@ class ProjectEditor(ParameterEditor):
 
         # output
         box = self.add_group('output')
-        box.set_box_style(ParameterBox.SIMPLE)
-        box.set_collapsible(False)
+        box.set_box_style(ParameterBox.BUTTON)
         output_group = box.form
 
         # actions

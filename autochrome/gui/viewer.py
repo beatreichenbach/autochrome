@@ -1,23 +1,16 @@
 from __future__ import annotations
 
-import enum
 import logging
-from typing import Any
-
-import numpy as np
 
 import PyOpenColorIO as OCIO
+import numpy as np
 from PySide2 import QtWidgets, QtCore
 
-from qt_extensions import helper
 from autochrome.api.data import RenderElement
-
+from autochrome.storage import Storage
+from autochrome.utils import ocio
 from qt_extensions.parameters import EnumParameter
 from qt_extensions.viewer import Viewer
-
-from autochrome.storage import Storage
-
-from autochrome.utils import ocio
 
 logger = logging.getLogger(__name__)
 storage = Storage()

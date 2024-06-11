@@ -131,9 +131,12 @@ class Engine(QtCore.QObject):
         grain = self.grain_task.run(project, spectral_images)
 
         # TODO: colorspace should be stored in Image
+        src_name = 'Output - sRGB'
+        image = apply_colorspace(grain, src_name)
+
         # src_name = 'CIE-XYZ-D65'
         src_name = 'Utility - XYZ - D60'
-        image = apply_colorspace(grain, src_name)
+        image = apply_colorspace(image, src_name)
 
         return image
 

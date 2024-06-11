@@ -48,7 +48,7 @@ class JSONStorage(metaclass=Singleton):
 
 @dataclass()
 class Settings:
-    sentry: Union[bool, None] = None
+    sentry: bool | None = None
     ocio: str = ''
     view_colorspace: str = ''
     clear_log_on_render: bool = True

@@ -1,6 +1,6 @@
-from functools import wraps
 import logging
 import time
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +19,12 @@ def timer(func):
 
 
 class Timer:
-    def __init__(self, label=None):
+    def __init__(self, label: str | None = None) -> None:
         self.label = label or ''
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         self.start_time = time.perf_counter()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         ms = (time.perf_counter() - self.start_time) * 1000
         logger.info(f'{self.label: <40}{ms:9.3f}ms')
