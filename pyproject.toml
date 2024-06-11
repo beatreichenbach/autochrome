@@ -6,15 +6,12 @@ authors = [
     {name = "Beat Reichenbach"}
 ]
 dependencies = [
-#    "qt-extensions @ https://github.com/beatreichenbach/qt-extensions/archive/refs/heads/main.zip",
-#    "PySide2",
-#    "numpy",
-#    "pyopencl",
-#    "torch",
-#    "torchvision",
-#    "opencolorio",
-#    "opencv-python-headless",
-#    "einops",
+    "qt-extensions",
+    "PySide2",
+    "numpy",
+    "pyopencl",
+    "opencolorio",
+    "opencv-python-headless"
 ]
 requires-python = ">=3.9, <3.11"
 license = {text = "MIT"}
@@ -22,6 +19,7 @@ readme = "README.md"
 
 [project.optional-dependencies]
 dev = [
+    "pytest",
     "python-semantic-release",
     "black"
 ]
@@ -34,20 +32,20 @@ build-backend = "setuptools.build_meta"
 include = ["autochrome*"]
 
 [tool.setuptools.package-data]
-autochrome = ["**/*.cl"]
+autochrome = ["**/*.cl", "**/*.json"]
 
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "DEBUG"
 
 [tool.semantic_release]
-version_variable = "autochrome/__init__.py:__version__"
-branch = "main"
-upload_to_pypi = false
-upload_to_repository = false
-upload_to_release = false
 version_toml = "pyproject.toml:project.version"
-#build_command = "python -m build --sdist --wheel"
+version_variables = [
+    "autochrome/__init__.py:__version__"
+]
+
+[tool.semantic_release.remote]
+ignore_token_for_push = true
 
 [tool.black]
 skip-string-normalization = true

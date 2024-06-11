@@ -1,76 +1,72 @@
 # Autochrome
 
-https://en.wikipedia.org/wiki/Autochrome_Lumi%C3%A8re
+Autochrome is a tool to synthesize realistic film grain. It is based on the research of
+Newson at al (2017).
+
+The name Autochrome is based on the early color photography process [Autochrome Lumière].
+
+![Screenshot of Autochrome](.github/assets/screenshot.png)
+
+[Autochrome Lumière]: https://en.wikipedia.org/wiki/Autochrome_Lumi%C3%A8re
+
+## Installation
+
+Requires [Python 3.10](https://www.python.org/downloads)
+
+```shell
+pip install autochrome@https://github.com/beatreichenbach/autochrome/archive/refs/heads/main.zip
+python -m autochrome --gui
+```
 
 ## Links
 
-[Advanced Emulsion](https://www.youtube.com/watch?v=I4_7tW-cx1I)
+- [The Challenge of Simulating Grain in Film Stocks of the Past](https://blog.metaphysic.ai/the-challenge-of-simulating-grain-in-film-stocks-of-the-past/)
 
-[Realistic Film Grain Rendering](https://www.ipol.im/pub/art/2017/192/article_lr.pdf)
+### Spectral Reconstruction
 
-[YouTube: Film Grain Rendering](https://cg.ivd.kit.edu/publications/2015/spectrum/paper-preprint.pdf)
+- [A Low-Dimensional Function Space for Efficient Spectral Upsampling](https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2019Spectral_3.pdf)
+- [Physically Meaningful Rendering using Tristimulus Colours](https://cg.ivd.kit.edu/publications/2015/spectrum/paper-preprint.pdf)
+- [Rgb to Spectrum Conversion](http://sv-journal.org/2015-4/03/en/index.php?lang=en)
+- [GitHub: caiyuanhao1998/MST-plus-plus](https://github.com/caiyuanhao1998/MST-plus-plus)
+- [GitHub: boazarad/NTIRE2022_spectral](https://github.com/boazarad/NTIRE2022_spectral)
 
-[film_grain_rendering_gpu](https://github.com/alasdairnewson/film_grain_rendering_gpu)
+### Film
 
+- [Advanced Emulsion](https://www.youtube.com/watch?v=I4_7tW-cx1I)
+- [Kodak Portra 800](https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf)
+- [Fuji: Superia Xtra 800](https://125px.com/docs/film/fuji/superia_xtra800_datasheet.pdf)
+- [Kodak: Ektachrome 100](https://imaging.kodakalaris.com/sites/default/files/files/products/e4000_ektachrome_100.pdf)
+- [Kodak: Portra 800](https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf)
 
-## Spectral Reconstruction
+### Grain
 
-### Textures (Reflective Spectra)
+- [Realistic Film Grain Rendering](https://www.ipol.im/pub/art/2017/192/article_lr.pdf)
+- [YouTube: Film Grain Rendering](https://cg.ivd.kit.edu/publications/2015/spectrum/paper-preprint.pdf)
+- [GitHub: alasdairnewson/film_grain_rendering_gpu](https://github.com/alasdairnewson/film_grain_rendering_gpu)
+- [GitHub: mitsuba-renderer/rgb2spec](https://github.com/mitsuba-renderer/rgb2spec)
+- [GitHub: nbvdkamp/rgb2spec-rs](https://github.com/nbvdkamp/rgb2spec-rs)
 
-[Rgb to Spectrum Conversion](http://sv-journal.org/2015-4/03/en/index.php?lang=en)
+### Images
 
-[Physically Meaningful Rendering using Tristimulus Colours](https://cg.ivd.kit.edu/publications/2015/spectrum/paper-preprint.pdf)
+- <https://stocksnap.io/photo/female-portrait-UOBQKFXUIG>
+- <https://stocksnap.io/photo/male-portrait-NLX0RAPBGB>
+- <https://stocksnap.io/photo/woman-female-JDXWHY8CIN>
+- <https://stocksnap.io/photo/female-portrait-NWFLCH8IBN>
+- <https://stocksnap.io/photo/woman-beach-FJCOO6JWDP>
 
-[A Low-Dimensional Function Space for Efficient Spectral Upsampling](https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2019Spectral_3.pdf)
+## Contributing
 
-### Image
-
-https://github.com/caiyuanhao1998/MST-plus-plus
-https://github.com/caiyuanhao1998/BiSCI
-https://github.com/hustvl/SAUNet
-https://github.com/Deep-imagelab/AWAN
-https://github.com/dsabarinathan/LightWeightModel
-https://github.com/divyakraman/Single-Image-Unsupervised-Hyperspectral-Reconstruction
-
-
-https://github.com/AmusementClub/vs-fgrain-cuda
-https://github.com/alasdairnewson/film_grain_rendering_gpu
-
-```python
-import numpy as np
-mu = 0.1
-sigma = 0.0
-u = 0.5
-
-cell_size = 1 / np.ceil(1 / mu)
-area = np.pi * ((mu * mu) + (sigma * sigma))
-lambda_u = -((cell_size * cell_size) / area) * np.log(1 - u)
-
-print(lambda_u)
-print(np.exp(-lambda_u))
+Create a virtual environment:
+```shell
+python -m venv venv
 ```
 
-https://github.com/caiyuanhao1998/MST-plus-plus
+Install the development package:
+```shell
+python -m pip install -e .[dev]
+```
 
-https://github.com/boazarad/NTIRE2022_spectral
-
-
-https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf
-https://github.com/alasdairnewson/film_grain_rendering_gpu/blob/5695ff2abea762c90740a0ae309336dc9be4cd95/src/film_grain_rendering.cu
-https://github.com/mitsuba-renderer/rgb2spec
-https://github.com/nbvdkamp/rgb2spec-rs
-
-
-https://www.photrio.com/forum/threads/an-alternative-to-negative-lab-pro-and-lr-has-to-exist-c-41-reversal-and-orange-mask-removal.166696/post-2170267
-
-https://125px.com/docs/film/fuji/superia_xtra800_datasheet.pdf
-https://imaging.kodakalaris.com/sites/default/files/files/products/e4000_ektachrome_100.pdf
-https://imaging.kodakalaris.com/sites/default/files/files/products/e4040_portra_800.pdf
-
-
-https://stocksnap.io/photo/female-portrait-UOBQKFXUIG
-https://stocksnap.io/photo/male-portrait-NLX0RAPBGB
-https://stocksnap.io/photo/woman-female-JDXWHY8CIN
-https://stocksnap.io/photo/female-portrait-NWFLCH8IBN
-https://stocksnap.io/photo/woman-beach-FJCOO6JWDP
-https://stocksnap.io/photo/urban-female-9EHZ6COVCM
+To release a new version:
+```shell
+semantic-release version
+```
