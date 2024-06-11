@@ -2,6 +2,13 @@
 
 
 
+## v0.1.1 (2024-06-10)
+
+### Build
+
+* build: update build command ([`5b63007`](https://github.com/beatreichenbach/autochrome/commit/5b630076fd591d29ff912a0c97866728999511fe))
+
+
 ## v0.1.0 (2024-06-10)
 
 ### Feature
