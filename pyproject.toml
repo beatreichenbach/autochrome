@@ -1,0 +1,51 @@
+[project]
+name = "autochrome"
+description = "Filmic Emulsion for VFX"
+version = "0.0.1"
+authors = [
+    {name = "Beat Reichenbach"}
+]
+dependencies = [
+    "qt-extensions",
+    "PySide2",
+    "numpy",
+    "pyopencl",
+    "opencolorio",
+    "opencv-python-headless"
+]
+requires-python = ">=3.9, <3.11"
+license = {text = "MIT"}
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "python-semantic-release",
+    "black"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["autochrome*"]
+
+[tool.setuptools.package-data]
+autochrome = ["**/*.cl", "**/*.json"]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "DEBUG"
+
+[tool.semantic_release]
+version_toml = "pyproject.toml:project.version"
+version_variables = [
+    "autochrome/__init__.py:__version__"
+]
+
+[tool.semantic_release.remote]
+ignore_token_for_push = true
+
+[tool.black]
+skip-string-normalization = true
