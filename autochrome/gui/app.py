@@ -35,6 +35,7 @@ class MainWindow(DockWindow):
     render_requested: QtCore.Signal = QtCore.Signal(Project)
     stop_requested: QtCore.Signal = QtCore.Signal()
     elements_changed: QtCore.Signal = QtCore.Signal(list)
+    engine_started: QtCore.Signal = QtCore.Signal(str)
 
     default_window_state = {
         'widgets': [
@@ -124,15 +125,18 @@ class MainWindow(DockWindow):
         self.rendering = False
 
         try:
-            self.engine = Engine(self.project.render.device)
+            self.engine = Engine()
         except (cl.Error, ValueError) as e:
             self.engine = None
             logger.error(e)
-            logger.error('failed to start the engine')
+            logger.error('Failed to start the engine')
             return
 
         self.engine.moveToThread(self._api_thread)
         self._api_thread.start()
+
+        self.engine_started.connect(self.engine.init)
+        self.engine_started.emit(self.project.render.device)
 
         self.engine.image_rendered.connect(self._image_rendered)
         self.engine.progress_changed.connect(self._progress_changed)
@@ -473,6 +477,7 @@ class MainWindow(DockWindow):
 
         # device
         if self.project.render.device != self._device:
+            logger.debug('Device changed')
             self._device = self.project.render.device
             self.restart()
 

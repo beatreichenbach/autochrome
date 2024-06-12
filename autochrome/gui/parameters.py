@@ -100,11 +100,6 @@ class ProjectEditor(ParameterEditor):
         parm.set_slider_visible(False)
         spectral_group.add_parameter(parm)
 
-        parm = IntParameter(name='lambda_count')
-        parm.set_line_min(2)
-        parm.set_slider_visible(False)
-        spectral_group.add_parameter(parm)
-
         parm = PathParameter(name='curves_file')
         spectral_group.add_parameter(parm)
 

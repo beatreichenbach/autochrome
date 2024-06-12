@@ -31,7 +31,8 @@ storage = Storage()
 def apply_colorspace(image: Image, src_name: str) -> Image:
     array = image.array.copy()
     processor = ocio.colorspace_processor(src_name=src_name)
-    processor.applyRGBA(array)
+    if processor:
+        processor.applyRGBA(array)
     image = Image(image.context, array=array, args=(image, src_name))
     return image
 
@@ -40,14 +41,19 @@ class Engine(QtCore.QObject):
     image_rendered: QtCore.Signal = QtCore.Signal(RenderImage)
     progress_changed: QtCore.Signal = QtCore.Signal(float)
 
-    def __init__(self, device: str = '', parent: QtCore.QObject | None = None) -> None:
+    def __init__(self, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
-
-        self.queue = opencl.command_queue(device)
-        logger.debug(f'Engine initialized on device: {self.queue.device.name}')
 
         self._emit_cache = {}
         self._elements = []
+
+        self.queue = None
+
+    def init(self, device: str = '') -> None:
+        """Initializes the engine. This needs to happen in a different function to
+        create all objects in the right thread."""
+        self.queue = opencl.command_queue(device)
+        logger.debug(f'Engine initialized on device: {self.queue.device.name}')
         self._init_renderers()
         self._init_tasks()
 
@@ -74,11 +80,11 @@ class Engine(QtCore.QObject):
 
     def source(self, project: Project) -> Image:
         image_file = File(project.input.image_path)
-        resolutin = (
+        resolution = (
             project.render.resolution if project.render.force_resolution else None
         )
-        image = self.emulsion_task.load_file(image_file, resolutin)
-        # TODO: needs colorspace
+        image = self.emulsion_task.load_file(image_file, resolution)
+        image = apply_colorspace(image, project.input.colorspace)
         return image
 
     def emulsion(self, project: Project) -> Image:
@@ -142,6 +148,9 @@ class Engine(QtCore.QObject):
 
     @timer
     def render(self, project: Project) -> bool:
+        if not self.queue:
+            self.init()
+
         self.progress_changed.emit(0)
         try:
             for element in self._elements:

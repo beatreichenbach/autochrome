@@ -160,12 +160,14 @@ class EmulsionTask(OpenCL):
         processor = ocio.colorspace_processor(
             src_name=input_colorspace, dst_name=dst_name
         )
-        processor.applyRGBA(image_array)
+        if processor:
+            processor.applyRGBA(image_array)
 
         # dst_name='CIE-XYZ-D65'
         dst_name = 'Utility - XYZ - D60'
         processor = ocio.colorspace_processor(dst_name=dst_name)
-        processor.applyRGBA(image_array)
+        if processor:
+            processor.applyRGBA(image_array)
 
         xyz_image = Image(
             self.context,

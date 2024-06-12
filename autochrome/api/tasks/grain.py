@@ -12,6 +12,7 @@ from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
 from autochrome.utils import ocio
 from autochrome.utils.timing import timer
 
+MAX_INT = 2**31
 logger = logging.getLogger(__name__)
 
 
@@ -131,8 +132,9 @@ class GrainTask(OpenCL):
             image = Image(self.context, array=luminance)
 
             self.kernel.set_arg(0, image.image)
-            # NOTE: 1431655765 is roughly a third of the max range for the random noise.
-            self.kernel.set_arg(7, np.int32(seed_offset + c * 1431655765))
+            # NOTE: Set seed to roughly a third of the max range for the random noise.
+            seed = np.int32(int((MAX_INT - seed_offset) / 3) * c)
+            self.kernel.set_arg(7, seed)
 
             cl.enqueue_nd_range_kernel(
                 self.queue, self.kernel, global_work_size, local_work_size
