@@ -64,8 +64,8 @@ def test_halation():
     checkerboard = np.dstack((checkerboard,) * 3)
     print(checkerboard.shape)
 
-    image = Image(queue, array=checkerboard)
-    kernel = Image(queue, array=get_kernel())
+    image = Image(queue.context, array=checkerboard)
+    kernel = Image(queue.context, array=get_kernel())
     project = Project()
     project.halation.mask_only = False
     halation_image = halation_task.run(project=project, image=image, kernel=kernel)

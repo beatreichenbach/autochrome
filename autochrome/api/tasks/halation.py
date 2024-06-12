@@ -15,7 +15,6 @@ def fft_convolve2d(
 ) -> np.ndarray:
     """Return a 2D convolution."""
     fft_source = np.fft.fft2(source)
-    # TODO: handle both dimensions
     padding = (np.array(source.shape) - np.array(kernel.shape)) / 2
     pad = int(padding[0]), int(padding[1])
     kernel = np.pad(kernel, ((pad[0],), (pad[1],)), mode='constant')
@@ -43,13 +42,19 @@ class HalationTask(OpenCL):
         halation_only: bool,
     ):
         args = (image, kernel, threshold, amount, mask_only, halation_only)
-        luminance = image.array[:, :, 1]
+
+        luminance = (
+            image.array[:, :, 0] * 0.2126
+            + image.array[:, :, 1] * 0.7152
+            + image.array[:, :, 2] * 0.0722
+        )
+        # luminance = image.array[:, :, 1]
 
         mask = np.where(luminance > threshold, luminance - threshold, 0)
         mask = mask[:, :, np.newaxis]
 
         if mask_only:
-            output = Image(self.queue, array=mask, args=args)
+            output = Image(self.queue.context, array=mask, args=args)
             return output
 
         masked_array = image.array * mask
@@ -66,12 +71,12 @@ class HalationTask(OpenCL):
             halation[:, :, i] = convolve[pad:-pad, pad:-pad]
 
         if halation_only:
-            output = Image(self.queue, array=halation, args=args)
+            output = Image(self.queue.context, array=halation, args=args)
             return output
 
         logger.debug(f'{halation.shape=}')
 
-        output = Image(self.queue, array=image.array + halation * amount, args=args)
+        output = Image(self.queue.context, array=image.array + halation * amount, args=args)
         return output
 
     @timer
