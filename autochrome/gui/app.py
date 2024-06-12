@@ -12,6 +12,7 @@ from importlib.resources import files
 
 import pyopencl as cl
 from PySide2 import QtCore, QtGui, QtWidgets
+
 from autochrome.api.data import Project, RenderImage
 from autochrome.api.engine import Engine, clear_cache
 from autochrome.gui.parameters import ProjectEditor
@@ -24,7 +25,7 @@ from qt_extensions import theme
 from qt_extensions.icons import MaterialIcon
 from qt_extensions.logger import LogCache, LogBar, LogViewer
 from qt_extensions.mainwindow import DockWindow, DockWidgetState, SplitterState
-from qt_extensions.typeutils import basic
+from qt_extensions.typeutils import basic, cast
 
 logger = logging.getLogger(__name__)
 storage = Storage()
