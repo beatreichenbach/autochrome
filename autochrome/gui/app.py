@@ -568,7 +568,15 @@ def init_app() -> QtWidgets.QApplication:
     app.setWindowIcon(icon)
 
     # theme
-    theme.apply_theme(theme.modern_dark)
+
+    one_dark_two = theme.ColorScheme(
+        base_bg=QtGui.QColor(29, 31, 35),
+        base_mg=QtGui.QColor(33, 37, 43),
+        base_fg=QtGui.QColor(57, 62, 71),
+        text=QtGui.QColor(230, 230, 230),
+        primary=QtGui.QColor(200, 139, 218),
+    )
+    theme.apply_theme(one_dark_two)
 
     return app
 

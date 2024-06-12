@@ -31,7 +31,7 @@ class RenderImage:
 
 @hashable_dataclass
 class Input:
-    image_path: str = '/home/beat/Downloads/ferrari_hamilton_live_v02.exr'
+    image_path: str = ''
     colorspace: str = 'ACES - ACEScg'
 
 
@@ -39,7 +39,6 @@ class Input:
 class Emulsion:
     wavelength_count: int = 21
     model_resolution: int = 16
-    lambda_count: int = 21
     curves_file: str = '$CURVES/kodak_ektachrome_100.json'
     standard_illuminant: str = 'D65'
     cmfs_variation: str = 'CIE 2015 2 Degree Standard Observer'
@@ -58,12 +57,12 @@ class Halation:
 
 @hashable_dataclass
 class Grain:
-    samples: int = 1024
+    samples: int = 512
     blur_sigma: float = 0.5
     seed_offset: int = 0
     grain_mu: float = 0.07
     grain_sigma: float = 0.0
-    lift: float = 0.000
+    lift: float = 0.02
 
 
 @hashable_dataclass
@@ -79,8 +78,8 @@ class Render:
 @hashable_dataclass
 class Output:
     write: bool = False
-    element: RenderElement = RenderElement.GRAIN
-    path: str = '/home/beat/Downloads/ferrari_hamilton_live_v02_grain_0.07.exr'
+    element: RenderElement = RenderElement.INPUT
+    path: str = ''
     colorspace: str = 'ACES - ACEScg'
     frame: int = 0
 

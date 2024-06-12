@@ -29,9 +29,8 @@ def hash_args(*args) -> str:
 @lru_cache(10)
 def get_model_path(project: Project, cache_dir: str = '') -> str:
     args = (
-        project.emulsion.wavelength_count,
         project.emulsion.model_resolution,
-        project.emulsion.lambda_count,
+        project.emulsion.wavelength_count,
         project.emulsion.standard_illuminant,
         project.emulsion.cmfs_variation,
         LAMBDA_MIN,
@@ -463,7 +462,7 @@ class SpectralTask:
             model_path=model_path,
             cmfs_variation=project.emulsion.cmfs_variation,
             standard_illuminant=project.emulsion.standard_illuminant,
-            lambda_count=project.emulsion.lambda_count,
+            lambda_count=project.emulsion.wavelength_count,
             lambda_min=lambda_min,
             lambda_max=lambda_max,
         )

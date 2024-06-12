@@ -7,7 +7,7 @@ import numpy as np
 import pyopencl as cl
 from PySide2 import QtCore
 
-from autochrome.api.data import Project, EngineError, RenderElement
+from autochrome.api.data import Project, EngineError
 from autochrome.api.path import File
 from autochrome.api.tasks import jakob
 from autochrome.api.tasks.opencl import OpenCL, Image, Buffer
@@ -62,7 +62,7 @@ class EmulsionTask(OpenCL):
         try:
             array = cv2.imread(filename, cv2.IMREAD_COLOR | cv2.IMREAD_ANYDEPTH)
             array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
-        except ValueError as e:
+        except ValueError:
             message = f'Invalid Image path: {filename}'
             raise EngineError(message) from None
 
@@ -268,6 +268,6 @@ class EmulsionTask(OpenCL):
             force_resolution=project.render.force_resolution,
             model_path=model_path,
             curves_file=curves_file,
-            lambda_count=project.emulsion.lambda_count,
+            lambda_count=project.emulsion.wavelength_count,
         )
         return spectral_images
