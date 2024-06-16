@@ -40,7 +40,6 @@ log_cli = true
 log_cli_level = "DEBUG"
 
 [tool.semantic_release]
-build_command = "python -m build --sdist --wheel"
 version_toml = [
     "pyproject.toml:project.version"
 ]
