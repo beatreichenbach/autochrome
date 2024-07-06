@@ -12,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 CL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'cl'))
 
-LAMBDA_MIN = 390
-LAMBDA_MAX = 730
-
 
 # TODO: turn shape into a property or function.
 class MemoryObject:

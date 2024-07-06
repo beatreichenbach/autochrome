@@ -37,6 +37,8 @@ class Input:
 
 @hashable_dataclass
 class Emulsion:
+    lambda_min: int = 360
+    lambda_max: int = 780
     wavelength_count: int = 21
     model_resolution: int = 16
     curves_file: str = '$CURVES/kodak_ektachrome_100.json'

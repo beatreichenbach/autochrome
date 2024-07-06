@@ -15,9 +15,6 @@ from autochrome.storage import Storage
 from autochrome.utils import ocio, color
 from autochrome.utils.timing import timer
 
-LAMBDA_MIN = 390
-LAMBDA_MAX = 830
-
 logger = logging.getLogger(__name__)
 storage = Storage()
 
@@ -186,18 +183,18 @@ class EmulsionTask(OpenCL):
         force_resolution: bool,
         model_path: str,
         curves_file: File,
+        lambda_min: int,
+        lambda_max: int,
         lambda_count: int,
+        model_resolution: int,
+        standard_illuminant: str,
+        cmfs_variation: str,
     ) -> tuple[Image, ...]:
         lambda_count_changed = lambda_count != self._lambda_count
         if lambda_count_changed:
             self._lambda_count = lambda_count
         if self.rebuild or lambda_count_changed:
             self.build()
-
-        standard_illuminant = 'D65'
-        cmfs_variation = 'CIE 2015 2 Degree Standard Observer'
-        lambda_min = LAMBDA_MIN
-        lambda_max = LAMBDA_MAX
 
         if not force_resolution:
             resolution = None
@@ -213,7 +210,6 @@ class EmulsionTask(OpenCL):
         # logger.debug(f'{min_val=}, {max_val=}')
 
         model = self.update_model(model_path)
-        model_resolution = 16
 
         scale = self.update_scale(model_resolution)
         lambdas = self.update_lambdas(lambda_min, lambda_max, lambda_count)
@@ -270,6 +266,11 @@ class EmulsionTask(OpenCL):
             force_resolution=project.render.force_resolution,
             model_path=model_path,
             curves_file=curves_file,
+            lambda_min=project.emulsion.lambda_min,
+            lambda_max=project.emulsion.lambda_max,
             lambda_count=project.emulsion.wavelength_count,
+            model_resolution=project.emulsion.model_resolution,
+            standard_illuminant=project.emulsion.standard_illuminant,
+            cmfs_variation=project.emulsion.cmfs_variation,
         )
         return spectral_images

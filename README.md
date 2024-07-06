@@ -13,6 +13,12 @@ The name Autochrome is based on the early color photography process [Autochrome 
 
 Requires [Python 3.10](https://www.python.org/downloads)
 
+Create a virtual environment:
+```shell
+py -3.10 -m venv venv
+```
+
+Install the package:
 ```shell
 pip install autochrome@https://github.com/beatreichenbach/autochrome/archive/refs/heads/main.zip
 python -m autochrome --gui

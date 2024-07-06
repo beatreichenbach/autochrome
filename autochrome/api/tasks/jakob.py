@@ -10,10 +10,8 @@ from autochrome.storage import Storage
 from autochrome.utils import color
 from autochrome.utils.timing import timer
 
-EPSILON = 0.0001
+EPSILON = 1e-4
 COEFFICIENTS_COUNT = 3
-LAMBDA_MIN = 390
-LAMBDA_MAX = 830
 
 logger = logging.getLogger(__name__)
 storage = Storage()
@@ -33,8 +31,8 @@ def get_model_path(project: Project, cache_dir: str = '') -> str:
         project.emulsion.wavelength_count,
         project.emulsion.standard_illuminant,
         project.emulsion.cmfs_variation,
-        LAMBDA_MIN,
-        LAMBDA_MAX,
+        project.emulsion.lambda_min,
+        project.emulsion.lambda_max,
     )
     model_name = hash_args(*args)
     if not cache_dir:
@@ -60,6 +58,7 @@ def decompose(a: np.ndarray, tolerance: float) -> tuple[np.ndarray, list]:
     `a` is a 3x3 matrix
     """
     n = a.shape[0]
+
     p = list(range(n + 1))
 
     for i in range(n):
@@ -87,6 +86,104 @@ def decompose(a: np.ndarray, tolerance: float) -> tuple[np.ndarray, list]:
                 a[j][k] -= a[j][i] * a[i][k]
 
     return a, p
+
+
+def decompose_plu(A: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+    # Get the number of rows
+    n = A.shape[0]
+
+    # Allocate space for P, L, and U
+    U = A.copy()
+    L = np.eye(n, dtype=np.double)
+    P = np.eye(n, dtype=np.double)
+
+    # Loop over rows
+    for i in range(n):
+
+        # Permute rows if needed
+        for k in range(i, n):
+            if ~np.isclose(U[i, i], 0.0):
+                break
+            U[[k, k + 1]] = U[[k + 1, k]]
+            P[[k, k + 1]] = P[[k + 1, k]]
+
+        # Eliminate entries below i with row operations on U
+        # and reverse the row operations to manipulate L
+        factor = U[i + 1 :, i] / U[i, i]
+        L[i + 1 :, i] = factor
+        U[i + 1 :] -= factor[:, np.newaxis] * U[i]
+
+    return P, L, U
+
+
+def forward_substitution(L, b):
+
+    # Get number of rows
+    n = L.shape[0]
+
+    # Allocating space for the solution vector
+    y = np.zeros_like(b, dtype=np.double)
+
+    # Here we perform the forward-substitution.
+    # Initializing  with the first row.
+    y[0] = b[0] / L[0, 0]
+
+    # Looping over rows in reverse (from the bottom  up),
+    # starting with the second to last row, because  the
+    # last row solve was completed in the last step.
+    for i in range(1, n):
+        y[i] = (b[i] - np.dot(L[i, :i], y[:i])) / L[i, i]
+
+    return y
+
+
+def back_substitution(U, y):
+
+    # Number of rows
+    n = U.shape[0]
+
+    # Allocating space for the solution vector
+    x = np.zeros_like(y, dtype=np.double)
+
+    # Here we perform the back-substitution.
+    # Initializing with the last row.
+    x[-1] = y[-1] / U[-1, -1]
+
+    # Looping over rows in reverse (from the bottom up),
+    # starting with the second to last row, because the
+    # last row solve was completed in the last step.
+    for i in range(n - 2, -1, -1):
+        x[i] = (y[i] - np.dot(U[i, i:], x[i:])) / U[i, i]
+
+    return x
+
+
+def lu(A):
+
+    # Get the number of rows
+    n = A.shape[0]
+
+    U = A.copy()
+    L = np.eye(n, dtype=np.double)
+
+    # Loop over rows
+    for i in range(n):
+
+        # Eliminate entries below i with row operations
+        # on U and reverse the row operations to
+        # manipulate L
+        factor = U[i + 1 :, i] / U[i, i]
+        L[i + 1 :, i] = factor
+        U[i + 1 :] -= factor[:, np.newaxis] * U[i]
+
+    return L, U
+
+
+def lu_solve(A, b):
+    L, U = lu(A)
+    y = forward_substitution(L, b)
+    return back_substitution(U, y)
 
 
 def solve(a: np.ndarray, p: list, b: np.ndarray) -> np.ndarray:
@@ -166,12 +263,13 @@ def gauss_newton(
         residual = eval_residual(coefficients, xyz, xyz_table, whitepoint)
         jacobian = eval_jacobian(coefficients, xyz, xyz_table, whitepoint)
 
-        try:
-            jacobian, permutation = decompose(jacobian, 1e-15)
-        except ValueError as e:
-            raise ValueError('Error during decomposition.') from e
+        # try:
+        #     jacobian, permutation = decompose(jacobian, 1e-15)
+        # except ValueError as e:
+        #     raise ValueError('Error during decomposition.') from e
+        # x = solve(jacobian, permutation, residual)
 
-        x = solve(jacobian, permutation, residual)
+        x = lu_solve(jacobian, residual)
 
         coefficients -= x
         r = np.sum(np.square(residual))
@@ -180,10 +278,11 @@ def gauss_newton(
         #       LAB color space with a range of 256? 256 seems to give better results
         #       than 200.
         max_coefficients = np.max(coefficients)
-        if max_coefficients > 200:
-            coefficients *= 200 / max_coefficients
+        if max_coefficients > 256:
+            coefficients *= 256 / max_coefficients
 
         if r < threshold:
+            # logger.debug(f'iteration: {i}')
             break
 
     return coefficients
@@ -226,7 +325,7 @@ def create_model(
                 logger.info(f'Creating model: {100 * progress:>6.2f}%')
 
                 def iterate(start: int, end: int) -> None:
-                    # coefficients = np.zeros(3)
+                    coefficients = np.zeros(COEFFICIENTS_COUNT)
                     step = 1 if end > start else -1
                     for k in range(start, end, step):
                         b = scale[k]
@@ -238,6 +337,7 @@ def create_model(
                         # NOTE: initializing coefficients at 0 produced better results
                         #       than starting from previous result. Why?
                         coefficients = np.zeros(COEFFICIENTS_COUNT)
+
                         coefficients = gauss_newton(
                             xyz, coefficients, xyz_table, whitepoint
                         )
@@ -455,14 +555,12 @@ class SpectralTask:
             logger.debug('Model already exists.')
             return
 
-        lambda_min = LAMBDA_MIN
-        lambda_max = LAMBDA_MAX
         self.cache_model(
             resolution=project.emulsion.model_resolution,
             model_path=model_path,
             cmfs_variation=project.emulsion.cmfs_variation,
             standard_illuminant=project.emulsion.standard_illuminant,
             lambda_count=project.emulsion.wavelength_count,
-            lambda_min=lambda_min,
-            lambda_max=lambda_max,
+            lambda_min=project.emulsion.lambda_min,
+            lambda_max=project.emulsion.lambda_max,
         )
