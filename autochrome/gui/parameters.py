@@ -5,6 +5,7 @@ import dataclasses
 from PySide2 import QtWidgets, QtCore
 
 from autochrome.api.data import Project, RenderElement
+from autochrome.api.tasks import opencl
 from autochrome.utils import ocio
 from qt_extensions.parameters import (
     EnumParameter,
@@ -208,6 +209,7 @@ class ProjectEditor(ParameterEditor):
         render_group.add_parameter(parm)
 
         parm = StringParameter('device')
+        parm.set_menu(opencl.devices())
         render_group.add_parameter(parm)
 
         # output
