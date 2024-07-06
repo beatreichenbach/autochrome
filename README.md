@@ -21,6 +21,11 @@ py -3.10 -m venv venv
 Install the package:
 ```shell
 pip install autochrome@https://github.com/beatreichenbach/autochrome/archive/refs/heads/main.zip
+```
+
+## Usage
+
+```shell
 python -m autochrome --gui
 ```
 
